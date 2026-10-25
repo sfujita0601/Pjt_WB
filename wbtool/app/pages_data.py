@@ -13,10 +13,10 @@ from PySide6.QtWidgets import (
 from ..core.export import samples_from_csv, samples_to_csv
 from ..core.imageio import SUPPORTED_SUFFIXES, ImageLoadError, load_image, sha256_file
 from ..models.project import POLARITY_BRIGHT, POLARITY_DARK, ImageRecord, Sample, now_iso
-from .widgets import HintBox, error_box, page_header
+from .widgets import HintBox, LazyRefreshMixin, error_box, page_header
 
 
-class ProjectPage(QWidget):
+class ProjectPage(LazyRefreshMixin, QWidget):
     requestNew = Signal()
     requestOpen = Signal()
     requestSave = Signal()
@@ -77,7 +77,7 @@ class ProjectPage(QWidget):
         self.tbl_hist.verticalHeader().setVisible(False)
         v.addWidget(self.tbl_hist)
         lay.addWidget(g3, 2)
-        ctrl.changed.connect(self.refresh)
+        ctrl.changed.connect(self.request_refresh)
         ctrl.stateChanged.connect(self.refresh)
 
     def set_learning(self, on: bool) -> None:
@@ -115,7 +115,7 @@ EDITABLE_TEXT = {2: "protein_target", 5: "experiment_id", 6: "blot_id", 7: "memb
 SAMPLE_COLS = ["sample_id", "group", "bio_rep", "tech_rep", "notes", "使用レーン"]
 
 
-class ImagesPage(QWidget):
+class ImagesPage(LazyRefreshMixin, QWidget):
     openRoi = Signal(str)
 
     def __init__(self, ctrl):
@@ -182,7 +182,7 @@ class ImagesPage(QWidget):
         note.setStyleSheet("color:#555;")
         bl.addWidget(note)
         split.addWidget(bot)
-        ctrl.changed.connect(self.refresh)
+        ctrl.changed.connect(self.request_refresh)
         ctrl.projectReplaced.connect(lambda: self._status.clear())
 
     def set_learning(self, on: bool) -> None:

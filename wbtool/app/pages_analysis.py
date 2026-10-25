@@ -21,7 +21,7 @@ from ..core.normalize import STEP_DESCRIPTION
 from ..core.qc import STUDENT_CHECKLIST
 from ..core.stats import describe, two_group_test
 from ..models.project import BG_LABELS, BG_METHODS, POLARITY_BRIGHT, POLARITY_DARK, QC_DECISIONS, QCDecision, now_iso
-from .widgets import DataFrameModel, HintBox, fmt, level_color, make_table_view, page_header
+from .widgets import DataFrameModel, HintBox, LazyRefreshMixin, fmt, level_color, make_table_view, page_header
 
 MEAS_HEADERS = {
     "image_id": "画像", "band_id": "バンド", "lane_id": "レーン", "sample_id": "sample_id", "group": "群",
@@ -37,7 +37,7 @@ MEAS_SHOW = ["image_id", "band_id", "lane_id", "sample_id", "group", "bio_rep", 
 
 
 # ===================================================================== 背景補正・定量
-class QuantPage(QWidget):
+class QuantPage(LazyRefreshMixin, QWidget):
     def __init__(self, ctrl):
         super().__init__()
         self.ctrl = ctrl
@@ -83,7 +83,7 @@ class QuantPage(QWidget):
         v.addWidget(self.view)
         split.addWidget(g)
         split.setStretchFactor(1, 3)
-        ctrl.changed.connect(self.refresh)
+        ctrl.changed.connect(self.request_refresh)
 
     def set_learning(self, on: bool) -> None:
         self.hint.setVisible(on)
@@ -151,7 +151,7 @@ class QuantPage(QWidget):
 
 
 # ===================================================================== 正規化
-class NormPage(QWidget):
+class NormPage(LazyRefreshMixin, QWidget):
     def __init__(self, ctrl):
         super().__init__()
         self.ctrl = ctrl
@@ -209,7 +209,7 @@ class NormPage(QWidget):
         chk.setWordWrap(True)
         chk.setStyleSheet("color:#333;")
         lay.addWidget(chk)
-        ctrl.changed.connect(self.refresh)
+        ctrl.changed.connect(self.request_refresh)
 
     def set_learning(self, on: bool) -> None:
         self.hint.setVisible(on)
@@ -251,7 +251,7 @@ class NormPage(QWidget):
 
 
 # ===================================================================== QC
-class QCPage(QWidget):
+class QCPage(LazyRefreshMixin, QWidget):
     def __init__(self, ctrl):
         super().__init__()
         self.ctrl = ctrl
@@ -286,7 +286,7 @@ class QCPage(QWidget):
             v.addWidget(c)
             self.checks.append(c)
         split.addWidget(g)
-        ctrl.changed.connect(self.refresh)
+        ctrl.changed.connect(self.request_refresh)
 
     def set_learning(self, on: bool) -> None:
         self.hint.setVisible(on)
@@ -385,7 +385,7 @@ class QCPage(QWidget):
 
 
 # ===================================================================== 統計
-class StatsPage(QWidget):
+class StatsPage(LazyRefreshMixin, QWidget):
     def __init__(self, ctrl):
         super().__init__()
         self.ctrl = ctrl
@@ -432,7 +432,7 @@ class StatsPage(QWidget):
         lay.addWidget(g, 1)
         self.txt = QTextBrowser()
         lay.addWidget(self.txt, 2)
-        ctrl.changed.connect(self.refresh)
+        ctrl.changed.connect(self.request_refresh)
         ctrl.projectReplaced.connect(lambda: self.chk_confirm.setChecked(False))
 
     def set_learning(self, on: bool) -> None:
@@ -508,7 +508,7 @@ class StatsPage(QWidget):
 
 
 # ===================================================================== Figure
-class FigurePage(QWidget):
+class FigurePage(LazyRefreshMixin, QWidget):
     def __init__(self, ctrl):
         super().__init__()
         self.ctrl = ctrl
@@ -598,7 +598,7 @@ class FigurePage(QWidget):
         wl.addWidget(self.lbl_note)
         split.addWidget(wrap)
         split.setStretchFactor(1, 2)
-        ctrl.changed.connect(self.refresh)
+        ctrl.changed.connect(self.request_refresh)
 
     def set_learning(self, on: bool) -> None:
         self.hint.setVisible(on)

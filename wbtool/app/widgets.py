@@ -69,6 +69,28 @@ class DataFrameModel(QAbstractTableModel):
         return str(section + 1)
 
 
+class LazyRefreshMixin:
+    """プロジェクトが変わったとき、表示中の画面だけをすぐ更新し、非表示の画面は次に表示したときに更新する。
+
+    計算結果は変わらない（表示の更新を遅らせるだけ）。大きな画像・多数の画像での操作を軽くするため。
+    """
+
+    _stale = False
+
+    def request_refresh(self) -> None:
+        if self.isVisible():
+            self._stale = False
+            self.refresh()
+        else:
+            self._stale = True
+
+    def showEvent(self, ev):  # noqa: N802
+        super().showEvent(ev)
+        if self._stale:
+            self._stale = False
+            self.refresh()
+
+
 def make_table_view(model: QAbstractTableModel) -> QTableView:
     v = QTableView()
     v.setModel(model)

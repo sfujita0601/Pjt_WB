@@ -39,6 +39,7 @@ class ProjectController(QObject):
         self._norm: NormalizationResult | None = None
         self._qc: list[QCIssue] | None = None
         self.load_messages: list[str] = []
+        self._extremes: dict[str, tuple[float, float]] = {}   # 画像ごとの端値割合（画像は不変なのでキャッシュ）
 
     # ------------------------------------------------------------ 変更の確定
     def commit(self, action: str, detail: str = "", log: bool = True) -> None:
@@ -193,5 +194,5 @@ class ProjectController(QObject):
                     data[im.image_id] = d
                 elif im.image_id not in errors:
                     errors[im.image_id] = "画像を読み込めません。"
-            self._qc = run_qc(self.project, self.measurements(), data, errors)
+            self._qc = run_qc(self.project, self.measurements(), data, errors, self._extremes)
         return self._qc

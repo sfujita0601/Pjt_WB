@@ -22,6 +22,7 @@ def win(app, tmp_path, monkeypatch):
     from wbtool.app.main_window import MainWindow
     from wbtool.core.examples import build_example_project
     w = MainWindow()
+    w.show()   # 非表示の画面は遅延更新されるため、実際の利用と同じく表示する
     w.ctrl.new_project(build_example_project(tmp_path / "ex"))
     w.open_roi("IMG001")
     app.processEvents()

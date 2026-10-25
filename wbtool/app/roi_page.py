@@ -21,7 +21,7 @@ from ..core.quant import lane_profile, local_background_rects, profile_peak_area
 from ..models.project import (
     BG_LABELS, BG_LOCAL, BG_MANUAL, BG_METHODS, POLARITY_BRIGHT, POLARITY_DARK, BandROI, Lane, Rect, Sample,
 )
-from .widgets import HintBox, fmt, page_header
+from .widgets import HintBox, LazyRefreshMixin, fmt, page_header
 
 LANE_COLOR = QColor("#1E90FF")
 BAND_COLOR = QColor("#FF3030")
@@ -56,7 +56,7 @@ def make_roi(rect: Rect, color: QColor, z: float, dashed: bool = False) -> pg.RO
     return roi
 
 
-class RoiPage(QWidget):
+class RoiPage(LazyRefreshMixin, QWidget):
     def __init__(self, ctrl):
         super().__init__()
         self.ctrl = ctrl
@@ -67,7 +67,7 @@ class RoiPage(QWidget):
         self._localbg_items: list[QGraphicsRectItem] = []
         self._fitted_for = ""
         self._build_ui()
-        ctrl.changed.connect(self.refresh)
+        ctrl.changed.connect(self.request_refresh)
         ctrl.projectReplaced.connect(self._on_replaced)
 
     # ================================================================ UI 構築

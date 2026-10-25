@@ -51,7 +51,12 @@ def check_image_extremes(data: np.ndarray, polarity: str) -> tuple[float, float]
 
 
 def run_qc(project: Project, measurements: pd.DataFrame, image_data: dict[str, np.ndarray],
-           load_errors: dict[str, str] | None = None) -> list[QCIssue]:
+           load_errors: dict[str, str] | None = None,
+           extremes_cache: dict[str, tuple[float, float]] | None = None) -> list[QCIssue]:
+    """extremes_cache：画像ごとの端値画素の割合を保持する辞書（キーは画像パス＋ハッシュ）。
+
+    画像ファイルは不変なので、同じ画像について毎回全画素を数え直さないために使う。
+    """
     issues: list[QCIssue] = []
     add = issues.append
     for iid, err in (load_errors or {}).items():
@@ -79,7 +84,13 @@ def run_qc(project: Project, measurements: pd.DataFrame, image_data: dict[str, n
                         f"{im.image_id} はカラー画像をグレースケール変換して測定しています。",
                         "スキャナーをグレースケールモードにして取り込むことを推奨します。", im.image_id))
         if data is not None:
-            low, high = check_image_extremes(data, im.polarity)
+            key = f"{im.path}|{im.sha256}"
+            if extremes_cache is not None and key in extremes_cache:
+                low, high = extremes_cache[key]
+            else:
+                low, high = check_image_extremes(data, im.polarity)
+                if extremes_cache is not None:
+                    extremes_cache[key] = (low, high)
             vmax = dtype_max(data.dtype)
             if low > EXTREME_FRACTION:
                 add(QCIssue(f"low:{im.image_id}", LEVEL_WARN, "飽和・黒つぶれ候補",
