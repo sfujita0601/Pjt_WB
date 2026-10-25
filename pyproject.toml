@@ -1,0 +1,35 @@
+[project]
+name = "wbtool"
+version = "0.1.0"
+description = "Western blot 定量・正規化・統計・Figure 作成 GUI（教育機能つき）"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "PySide6>=6.6",
+    "pyqtgraph>=0.13.7",
+    "numpy>=1.26",
+    "scipy>=1.11",
+    "pandas>=2.1",
+    "matplotlib>=3.8",
+    "tifffile>=2023.9",
+    "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+wbtool = "wbtool.app.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["wbtool*"]
+
+[tool.setuptools.package-data]
+wbtool = ["resources/lessons/*.md"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

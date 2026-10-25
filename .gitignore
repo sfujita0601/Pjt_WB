@@ -1,0 +1,21 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+*.egg-info/
+build/
+dist/
+*.tmp
+
+# 解析対象の実画像・個人の解析データは追跡しない（教材用合成データ examples/ のみ追跡）
+data/
+real_images/
+*.wbproj.json
+!examples/**/*.wbproj.json
+wbtool_example/
+results/
+# 大きなファイル
+*.zip
+*.dmg
+*.app/
