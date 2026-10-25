@@ -112,9 +112,9 @@ def welch_test(a, b, group_a: str = "A", group_b: str = "B") -> TestResult:
 
 
 def paired_test(a: dict, b: dict, group_a: str = "A", group_b: str = "B") -> TestResult:
-    """a, b は {subject_id: 値}。共通の subject_id のみを対として用いる。"""
+    """a, b は {subject_id: 値}（欠損 NaN を含んでよい）。両群で有効な値がある subject_id のみを対として用いる。"""
     keys = [k for k in a if k in b and np.isfinite(a[k]) and np.isfinite(b[k])]
-    missing = len(set(a) ^ set(b)) + sum(1 for k in a if k in b and k not in keys)
+    missing = len(set(a) | set(b)) - len(keys)    # 対として使えなかった subject_id の数
     r = TestResult("対応のある t 検定", False, group_a, group_b, len(a), len(b), len(keys), n_missing=missing)
     if len(keys) < 2:
         r.refusal = "対になった実験単位が2組以上必要です（両群で同じ subject_id を入力してください）。"
@@ -183,8 +183,8 @@ def two_group_test(bio: pd.DataFrame, value_col: str, group_a: str, group_b: str
                               refusal="同じ群の中で subject_id が重複しています。1つの群で1つの実験単位は1回だけ測る前提です。")
         a = sa.set_index("subject_id")[value_col]
         b = sb.set_index("subject_id")[value_col]
-        # 欠損値の subject_id は対が揃わないものとして paired_test 側で1回だけ数える
-        r = paired_test(a.dropna().to_dict(), b.dropna().to_dict(), group_a, group_b)
+        # 欠損値・片方にしか無い subject_id は paired_test 側で1回ずつ数える
+        r = paired_test(a.to_dict(), b.to_dict(), group_a, group_b)
     r.notes.extend(ASSUMPTIONS[test])
     if value_col in ("fold", "log2_fold"):
         r.notes.append("fold／log2_fold は全値を同じ定数で割った（引いた）値なので、比／log2_ratio で検定しても p 値は同じです。")

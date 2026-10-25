@@ -263,7 +263,13 @@ class Project:
         samples = [Sample(**_known(Sample, s)) for s in d.pop("samples", [])]
         qc = {k: QCDecision(**v) for k, v in d.pop("qc_decisions", {}).items()}
         history = [HistoryEntry(**h) for h in d.pop("history", [])]
-        settings = AnalysisSettings(**_known(AnalysisSettings, d.pop("settings", {})))
+        raw_settings = dict(d.pop("settings", {}))
+        # 旧版（stat_design 導入前）で保存したプロジェクトの移行：対応 t を黙って Welch に変えない
+        if "stat_design" not in raw_settings and raw_settings.get("stat_test") == "paired":
+            raw_settings["stat_design"] = "paired"
+        if raw_settings.get("stat_value") in ("fold", "log2_fold"):
+            raw_settings["stat_value"] = "ratio" if raw_settings["stat_value"] == "fold" else "log2_ratio"
+        settings = AnalysisSettings(**_known(AnalysisSettings, raw_settings))
         return cls(images=images, samples=samples, qc_decisions=qc, history=history,
                    settings=settings, **_known(cls, d))
 

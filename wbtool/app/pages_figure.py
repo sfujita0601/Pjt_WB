@@ -275,7 +275,9 @@ class FigurePage(LazyRefreshMixin, QWidget):
 
     def current_figure(self) -> Figure:
         st = self.style()
-        bio = self.ctrl.normalization().bio_table
+        res = self.ctrl.normalization()
+        # 画面表示と同じく、統計・Figure を止める問題（bit 深度の混在など）があるときはデータを描かない
+        bio = res.bio_table.iloc[0:0] if res.blocking else res.bio_table
         out = self._stats()
         ann = out.annotations if (st.show_stats and out.ok) else None
         if self.tabs.currentIndex() == 0:
@@ -352,6 +354,10 @@ class FigurePage(LazyRefreshMixin, QWidget):
 
     # ------------------------------------------------------------ 保存
     def _save(self, ext: str) -> None:
+        if self.ctrl.normalization().blocking:
+            QMessageBox.warning(self, "Figure", "統計・Figure を止める問題があるため保存しません：\n" +
+                                "\n".join(self.ctrl.normalization().blocking))
+            return
         name = "figure" if self.tabs.currentIndex() == 0 else "figure_with_bands"
         path, _ = QFileDialog.getSaveFileName(self, f"{ext.upper()} で保存", f"{name}.{ext}", f"{ext.upper()} (*.{ext})")
         if not path:
@@ -397,6 +403,7 @@ class FigurePage(LazyRefreshMixin, QWidget):
         meta["stats"] = {"ok": out.ok, "method": out.method, "refusal": out.refusal, "description": out.description,
                          "notes": out.notes}
         meta["caption"] = self.txt_caption.toPlainText()
+        meta["blocking"] = res.blocking            # 統計・Figure を止めている問題（空なら無し）
         p.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
         QMessageBox.information(self, "データ保存", "図の数値（CSV）、統計結果（_stats.csv）、説明文（_caption.txt）、設定（JSON）を保存しました。")
 

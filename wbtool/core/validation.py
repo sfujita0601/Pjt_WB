@@ -37,7 +37,11 @@ def roi_specs(project: Project, image_id: str) -> list[dict]:
                 if r is not None:
                     specs.append({"id": f"{b.band_id}:{k}", "kind": k, "band_id": b.band_id, "rect": r})
     for i, r in enumerate(im.bg_rois, 1):
-        specs.append({"id": f"BG{i}:bg_manual", "kind": "bg_manual", "band_id": "", "rect": r.clipped(im.width, im.height)})
+        rc = r.clipped(im.width, im.height)
+        if rc.area == 0:
+            # 画像外の ROI は本アプリの計算でも除外される。ImageJ では幅 0 の選択が画像全体の測定になるため出力しない
+            continue
+        specs.append({"id": f"BG{i}:bg_manual", "kind": "bg_manual", "band_id": "", "rect": rc})
     return specs
 
 
@@ -113,8 +117,6 @@ def diagnose(ours: dict, fiji: pd.Series, vmax: int) -> str:
         return "Fiji 側で 8-bit に変換された可能性があります（Fiji の値が 0–255 の範囲に収まっています）。"
     if vmax == 255 and _close(ours["mean"] * 257.0, fiji["Mean"], 2e-3):
         return "Fiji 側で 16-bit に変換された可能性があります（値がおよそ 257 倍）。"
-    if "IntDen" in fiji and not _close(fiji["IntDen"], fiji["RawIntDen"]) and _close(ours["raw_sum"], fiji["RawIntDen"]):
-        return "RawIntDen は一致。IntDen は空間較正の影響を受けるため比較に使わないでください。"
     return ("画素値が一致しません。別の画像ファイル、Fiji 側での画像処理（背景除去・平滑化）、"
             "カラー画像のグレースケール変換の重みの違いなどを確認してください。")
 
@@ -172,10 +174,15 @@ def compare_with_fiji(project: Project, image_id: str, data: np.ndarray, fiji: p
         m = meas.loc[b.band_id] if meas is not None and b.band_id in meas.index else None
         b_app = float(m["bg_value"]) if m is not None else np.nan
         s_app = float(m["corrected"]) if m is not None else np.nan
+        both_nan = pd.isna(b_app) and pd.isna(b_fiji)
         ok = _close(b_app, b_fiji) and _close(s_app, s_fiji, 1e-6)
+        if both_nan:
+            diag = "本アプリ・Fiji とも背景値を計算できません（手動背景 ROI が無い等）。照合の対象外です。"
+        else:
+            diag = "一致" if ok else _band_diag(roi_table, b.band_id)
         brow.append({"band_id": b.band_id, "bg_method": method, "bg_app": b_app, "bg_fiji": b_fiji,
-                     "S_app": s_app, "S_fiji": s_fiji, "S_diff": s_app - s_fiji, "match": ok,
-                     "diagnosis": "一致" if ok else _band_diag(roi_table, b.band_id)})
+                     "S_app": s_app, "S_fiji": s_fiji, "S_diff": s_app - s_fiji, "match": ok or both_nan,
+                     "diagnosis": diag})
     band_table = pd.DataFrame(brow)
     notes = ["比較している量：Area（画素数）、Mean（平均画素値）、RawIntDen（画素値の総和）。",
              "S は Fiji の測定値から同じ式 S = s·(RawIntDen_band − Area_band × b) で再計算した値と比較しています。",

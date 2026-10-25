@@ -657,13 +657,14 @@ class RoiPage(LazyRefreshMixin, QWidget):
         self.cmb_filter.addItem("すべて", "")
         counts: dict[str, int] = {}
         for b in (im.bands if im else []):
-            counts[im.band_protein(b) or "（未設定）"] = counts.get(im.band_protein(b) or "（未設定）", 0) + 1
+            counts[im.band_protein(b)] = counts.get(im.band_protein(b), 0) + 1
         roles = self.ctrl.project.settings.protein_roles
-        for name in counts:
+        for name in counts:   # データは実際のタンパク質名（未設定は ""）、表示名だけ「（未設定）」にする
             role = roles.get(name)
-            self.cmb_filter.addItem(name + (f"（{ROLE_LABELS[role].split('（')[0]}）" if role else ""), name)
+            label = (name or "（未設定）") + (f"（{ROLE_LABELS[role].split('（')[0]}）" if role else "")
+            self.cmb_filter.addItem(label, name if name else "\0unset")
         self.cmb_filter.setCurrentIndex(max(self.cmb_filter.findData(cur), 0))
-        self.lbl_groups.setText("　".join(f"{n}：{c} バンド" for n, c in counts.items()))
+        self.lbl_groups.setText("　".join(f"{n or '（未設定）'}：{c} バンド" for n, c in counts.items()))
 
     def _fill_lane_table(self, im) -> None:
         t = self.tbl_lanes
@@ -703,7 +704,8 @@ class RoiPage(LazyRefreshMixin, QWidget):
         bands = im.bands if im else []
         filt = self.cmb_filter.currentData() if hasattr(self, "cmb_filter") else ""
         if filt:
-            bands = [b for b in bands if im.band_protein(b) == filt]
+            want = "" if filt == "\0unset" else filt
+            bands = [b for b in bands if im.band_protein(b) == want]
         t.setRowCount(len(bands))
         if not bands:
             return

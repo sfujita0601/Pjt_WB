@@ -245,3 +245,29 @@ def test_progress_panel_and_roles(win3, app):
     win3.ctrl.commit("test")
     panel.refresh()
     assert "S1" in panel.lbl_next.text() or "試料情報" in panel.lbl_next.text()
+
+
+def test_roi_filter_unset_protein(win, app):
+    page = win.pages["roi"][1]
+    im = win.ctrl.project.image("IMG001")
+    im.protein_target = ""
+    win.ctrl.commit("test")
+    app.processEvents()
+    idx = next(i for i in range(page.cmb_filter.count()) if "未設定" in page.cmb_filter.itemText(i))
+    page.cmb_filter.setCurrentIndex(idx)
+    app.processEvents()
+    assert page.tbl_bands.rowCount() == len(im.bands)
+
+
+def test_figure_save_refused_when_blocking(win, app, tmp_path, monkeypatch):
+    page = win.pages["figure"][1]
+    win.goto("figure")
+    res = win.ctrl.normalization()
+    res.blocking.append("テスト用の停止理由")
+    warned = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *a, **k: warned.append(a) or QMessageBox.Ok)
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(tmp_path / "x.png"), ""))
+    page._save("png")
+    assert warned and not (tmp_path / "x.png").exists()
+    assert len(page.current_figure().axes[0].collections) == 0

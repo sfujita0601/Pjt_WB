@@ -53,6 +53,25 @@ def value_column(settings: AnalysisSettings) -> str:
     return {"fold": "ratio", "log2_fold": "log2_ratio"}.get(v, v if v in VALUES else "ratio")
 
 
+def _uncomputed(norm: NormalizationResult, groups: list[str]) -> tuple[int, list[str]]:
+    """選んだ群で、比を計算できず生物学的反復の表に入らなかった試料（数と説明）。"""
+    st = norm.sample_table
+    if not len(st):
+        return 0, []
+    bad = st[st["group"].isin(groups) & st["ratio"].isna()]
+    return len(bad), [f"{r.sample_id}（{r.group}）：{r.status}" for r in bad.itertuples()]
+
+
+def _add_uncomputed(out: "StatsOutcome", norm: NormalizationResult, groups: list[str]) -> None:
+    n, lines = _uncomputed(norm, groups)
+    if n:
+        out.notes.insert(0, f"比を計算できなかった試料 {n} 個は解析に含まれていません：" + "；".join(lines))
+        if out.two is not None:
+            out.two.n_missing += n
+        if out.multi is not None:
+            out.multi.n_missing += n
+
+
 def run_stats(settings: AnalysisSettings, norm: NormalizationResult) -> StatsOutcome:
     if norm.blocking:
         return StatsOutcome(False, "two", refusal=" ".join(norm.blocking))
@@ -63,6 +82,7 @@ def run_stats(settings: AnalysisSettings, norm: NormalizationResult) -> StatsOut
         test = "paired" if settings.stat_design == "paired" else "welch"
         r = two_group_test(bio, val, settings.stat_group_a, settings.stat_group_b, test)
         out = StatsOutcome(r.ok, "two", r.test_name, r.refusal, two=r, notes=list(r.notes))
+        _add_uncomputed(out, norm, [settings.stat_group_a, settings.stat_group_b])
         if r.ok:
             out.table = pd.DataFrame([{
                 "group_a": r.group_a, "group_b": r.group_b, "value": val, "n_a": r.n_a, "n_b": r.n_b,
@@ -70,8 +90,11 @@ def run_stats(settings: AnalysisSettings, norm: NormalizationResult) -> StatsOut
                 "statistic": r.statistic, "df": r.df, "p": r.p_value, "p_adj": r.p_value,
                 "effect_name": r.effect_name, "effect_size": r.effect_size, "n_missing": r.n_missing, "method": r.test_name}])
             out.annotations = [StatAnnotation(r.group_a, r.group_b, r.p_value, r.test_name)]
-            out.description = (f"統計：{scale} について {r.test_name}（両側、解析単位は生物学的反復、"
-                               f"{r.group_a} n = {r.n_a}、{r.group_b} n = {r.n_b}）。")
+            if test == "paired":
+                ns = f"対の数 n = {r.n_pairs}（実験単位 subject_id で対応）"
+            else:
+                ns = f"{r.group_a} n = {r.n_a}、{r.group_b} n = {r.n_b}"
+            out.description = f"統計：{scale} について {r.test_name}（両側、解析単位は生物学的反復、{ns}）。"
         return out
     present = list(dict.fromkeys(bio["group"])) if len(bio) else []
     # 群を明示的に選んでいない場合は、画面の表示（全群にチェック）と同じく全群を使う
@@ -79,6 +102,7 @@ def run_stats(settings: AnalysisSettings, norm: NormalizationResult) -> StatsOut
     m = multi_group_test(bio, val, groups, settings.stat_goal, settings.control_group,
                          settings.stat_equal_var, settings.stat_design)
     out = StatsOutcome(m.ok, "multi", m.title, m.refusal, multi=m, notes=list(m.notes))
+    _add_uncomputed(out, norm, groups)
     if m.ok:
         t = m.pairs.copy()
         t.insert(2, "value", val)

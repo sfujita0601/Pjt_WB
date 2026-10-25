@@ -110,6 +110,8 @@ def normalize(measurements: pd.DataFrame, numerator: str, denominator: str,
             info = _band_info(r)
             row.update(denominator=float(r["corrected"]), den_band=info["band"], den_membrane=info["membrane"],
                        den_exposure=info["exposure"], den_bit_depth=info["bit_depth"])
+        if not status and not np.isfinite(row["numerator"]):
+            status.append("分子の S が無効（NaN：背景を推定できない、または ROI が画像外）のため計算しません")
         if not status:
             d = row["denominator"]
             if not np.isfinite(d) or d <= 0:

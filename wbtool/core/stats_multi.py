@@ -178,6 +178,9 @@ def multi_group_test(bio: pd.DataFrame, value_col: str, groups: list[str], goal:
     if not equal_var and any(s.var(ddof=1) == 0 for s in samples):
         r.refusal = "分散が 0 の群があり、等分散を仮定しない検定を計算できません。"
         return r
+    if equal_var and sum((len(s) - 1) * s.var(ddof=1) for s in samples) == 0:
+        r.refusal = "すべての群で分散が 0 のため（群内のばらつきが無い）、検定を計算できません。値を確認してください。"
+        return r
 
     if equal_var:
         r.omnibus_name = "一元配置 ANOVA（等分散を仮定）"
