@@ -159,3 +159,12 @@ def test_stats_runner_routes_and_builds_annotations(tmp_path):
     assert out2.ok and out2.kind == "two" and "Welch" in out2.method
     norm.blocking = ["混在"]
     assert not run_stats(s2, norm).ok
+
+
+def test_stats_runner_uses_all_groups_when_none_selected():
+    from wbtool.core.normalize import NormalizationResult
+    from wbtool.core.stats_runner import run_stats
+    from wbtool.models.project import AnalysisSettings
+    norm = NormalizationResult(pd.DataFrame(), bio_table(), 1.0)
+    out = run_stats(AnalysisSettings(control_group="Control", stat_goal="all_pairs", stat_groups=[]), norm)
+    assert out.ok and len(out.table) == 3

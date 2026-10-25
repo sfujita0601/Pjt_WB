@@ -37,7 +37,7 @@ class QuantPage(LazyRefreshMixin, QWidget):
                                   "全画像のバンドの測定値を一覧します。値は測定領域（ROI）・背景・極性の設定から毎回再計算されます。"))
         self.hint = HintBox(
             "背景補正の方法で S は大きく変わります。<b>近傍背景</b>はバンドの真上・真下の帯（バンドと同じ幅）の平均、"
-            "<b>手動背景ROI</b>は自分で置いた背景領域の平均、<b>補正なし</b>は暗いバンドなら白（最大値）を基準にします。"
+            "<b>手動背景ROI</b>は自分で置いた背景の測定領域の平均、<b>補正なし</b>は暗いバンドなら白（最大値）を基準にします。"
             "S が負でも 0 に丸めません。値は較正されていない<b>相対的な画像強度</b>で、タンパク質量そのものではありません。", lesson=3)
         lay.addWidget(self.hint)
         formula = QLabel(
@@ -170,7 +170,7 @@ class QCPage(LazyRefreshMixin, QWidget):
         self._building = False
         self._issues = []
         lay = QVBoxLayout(self)
-        lay.addWidget(page_header("QC（品質管理）", "自動チェックで見つかった「疑い」の一覧です。確定診断ではありません。"
+        lay.addWidget(page_header("QC（品質管理、quality control）", "自動チェックで見つかった「疑い」の一覧です。確定診断ではありません。"
                                   "各項目について判断（採用／除外／再撮影推奨）と理由を記録してください。問題データは自動では削除しません。"))
         self.hint = HintBox(
             "画素値が 0 や最大値に張り付いていれば飽和の<b>疑い</b>がありますが、張り付いていなくても、フィルムやスキャナーの"

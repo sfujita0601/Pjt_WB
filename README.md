@@ -11,7 +11,8 @@
 
 ## 動作環境
 
-- macOS（主対象。macOS 15 で確認）。Windows / Linux でも PySide6 が動けば動作する想定です（未検証）。
+- macOS（先行対応。macOS 15.3 / Apple M1 で確認）。
+- Windows・Linux は**未検証**です（OS 固有の機能には依存しないように実装していますが、対応 OS としては記載しません）。
 - Python 3.11 以上（開発は 3.12）
 
 ## 環境構築と起動（macOS）
@@ -20,7 +21,7 @@
 cd Pjt_WB
 # uv を使う場合（推奨）
 uv venv --python 3.12 .venv
-uv pip install --python .venv/bin/python -e ".[dev]"
+uv pip install --python .venv/bin/python -e ".[dev]"   # dev には統計の照合テスト用の statsmodels・pingouin を含む
 # uv が無い場合
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
@@ -40,9 +41,9 @@ python3 -m venv .venv
 ## 学生向け最短手順
 
 1. `.venv/bin/python -m wbtool` で起動する。
-2. ［プロジェクト］→「教材用サンプルを開く」（教材用合成データ。実験データではありません）。
+2. ［プロジェクト］→「教材用サンプルを開く」で 2群 または 3群 を選ぶ（教材用合成データ。実験データではありません）。
 3. ［レーン・バンドROI］で赤い ROI をドラッグし、右下の値が変わることを確かめる。⌘Z で元に戻す。
-4. ［QC］→［正規化］→［統計］→［Figure］の順に確認する。
+4. ［QC］→［正規化］→［統計］→［Figure］の順に確認する。左下の「進捗」に、未入力の項目と次にすることが出ます。
 5. 自分のデータでは、［画像・試料情報］で画像を追加し、タンパク質・膜・露光・試料表を入力してから同じ順に進める。
 
 詳しくは [docs/user_guide_ja.md](docs/user_guide_ja.md)（アプリ内の［学習・ヘルプ］からも読めます）。
@@ -68,7 +69,8 @@ S = Σ_i s·(p_i − b) = s·(Σp − N·b)
 ```
 
 補正前積分値 Σp、背景値 b、N·b、S、N をすべて別々に記録し、**負の値も 0 に丸めません**。
-正規化は ① sample_id ごとに S(分子)/S(分母) → ② technical replicate を平均 → ③ Control 群平均で割る（fold）。
+正規化は ① 試料ID（sample_id）ごとに S(分子)/S(分母) → ② 技術的反復（technical replicate）を平均して生物学的反復（biological replicate）の比
+→ ③ 対照群の平均で割った相対値（fold、表示用）→ ④ 選んだ場合は log2（正の比のみ）。検定には ② の比または ④ の log2 を使います。
 詳細は [docs/theory_ja.md](docs/theory_ja.md)。
 
 ## 保守的な初期値とその理由
@@ -77,13 +79,16 @@ S = Σ_i s·(p_i − b) = s·(Σp − N·b)
 |---|---|---|
 | 測定方法 | 矩形 ROI の背景補正積分 | 定義が単純で、Fiji の RawIntDen と照合できる |
 | バンド極性 | 暗いバンド | フィルムのスキャン像ではバンドが暗い。表示の反転とは独立に設定 |
-| 背景法 | 同一レーンのバンド近傍（上下、間隔 3 px・高さ 5 px） | レーン内の背景の傾きを線形なら打ち消せる。バンドの裾を避けるため間隔を空ける |
+| 背景法 | 同一レーンのバンド近傍（上下、間隔 3 px・高さ 5 px） | レーン内の背景の傾きを線形なら打ち消せる。**px は解像度・バンドサイズに依存し、固定の標準値ではない**。ROI 高さに対する比率でも設定できる |
 | 負の S | 丸めない | 丸めると背景推定の問題が隠れ、平均が偏る |
 | レーン検出 | 「候補提示」のみ | 完全自動検出は検証されていないため、必ず人が確認する |
 | 飽和判定 | 端値（0 / 最大値）の画素数による「疑い」 | 端値に達しない非線形性は画像からは検出できない |
-| 統計の単位 | biological replicate | technical replicate や同じ膜の別露光を独立な n に数えないため |
-| 検定 | Welch の t（等分散を仮定しない）／対応 t | 小標本で分散が等しい保証がない。3群以上は未実装として選択不可 |
-| エラーバー | SD | ばらつきそのものを示す。SEM と混同しないよう図の説明に明記 |
+| 統計の単位 | 生物学的反復 | 技術的反復や同じ膜の別露光を独立な n に数えないため |
+| 2群の検定 | Welch の t（等分散を仮定しない）／対応 t（subject_id で対応） | 小標本で分散が等しい保証がない。同じ日・同じブロットというだけでは対応ありにしない |
+| 3群以上 | Welch ANOVA＋Games–Howell（等分散を仮定するなら ANOVA＋Dunnett／Tukey） | 分散の均一性を仮定しない方が保守的。対応のある3群以上は未実装のため検定しない |
+| 検定に使う値 | 正規化比（線形）。log2 は選択式 | log2 を一律に強制しない。0・負値は擬似値で置き換えない |
+| エラーバー | SD（SEM・95%CI を選択可） | ばらつきそのものを示す。種類は図の説明文に自動で明記 |
+| bit 深度 | 8-bit と 16-bit の混在は統計・Figure を停止 | 階調スケールが異なる値は直接比較できない |
 | 膜間比較 | 補正しない（警告のみ） | 共通参照レーンによる補正は仮定が多く Phase 2 |
 | OD 変換 | 行わない | スキャナーとフィルムの較正なしに OD とみなすのは誤り |
 
@@ -92,19 +97,23 @@ S = Σ_i s·(p_i − b) = s·(Σp − N·b)
 ```
 wbtool/
 ├── app/        GUI（PySide6 + pyqtgraph）。計算は core を呼ぶだけ
-├── core/       画像読込・定量・レーン候補・QC・正規化・統計・作図・出力・合成データ（GUI 非依存）
+├── core/       画像読込・定量・レーン候補・QC・正規化・統計（2群・3群以上）・作図・バンド画像パネル・
+│               Fiji 照合・進捗・出力・合成データ（GUI 非依存）
 ├── models/     プロジェクトのデータモデル（JSON 保存）
 └── resources/lessons/  学習モードの教材 7 ページ
 examples/       教材用合成画像・試料表 CSV・正解値（make_examples.py で再生成）
-tests/          pytest（合成画像による既知解テスト、GUI 結合テスト）
+tests/          pytest（合成画像による既知解テスト、統計の参照実装との照合、GUI 結合テスト）
+benchmarks/     大きな画像での応答性の計測
 docs/           user_guide_ja / theory_ja / protocol_ja / validation_imagej
 ```
 
 ## 開発状況
 
-- MVP（仕様の C1〜C7、D、E）を実装済み。実装済み／未実装の一覧は [TODO.md](TODO.md)、計画は [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)。
-- 実画像での Fiji/ImageJ との照合はまだ行っていません（手順は [docs/validation_imagej.md](docs/validation_imagej.md)）。
+- MVP に加え、3群以上の統計、log2、エラーバー選択、バンド画像パネル、Fiji 照合ツール、進捗表示を実装済み。
+  実装済み／未検証／未実装の一覧は [TODO.md](TODO.md)、優先順位は [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)。
+- **実画像・Fiji 実機での照合は未実施**です（照合ツールと手順は [docs/validation_imagej.md](docs/validation_imagej.md)）。
   合成画像では、既知の画素値から計算した値と一致することを自動テストで確認しています。
+- 研究室の実際のスキャナー設定・Loading control の取得方式・画像サイズは未確認です。本書の設定は「推奨」です。
 
 ## 科学的な注意
 

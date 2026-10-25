@@ -33,7 +33,8 @@ class ProjectPage(LazyRefreshMixin, QWidget):
                                   "原画像はコピー・変更せず、ファイルの場所と SHA-256 ハッシュで参照します。"))
         self.hint = HintBox(
             "はじめての人は<b>「教材用サンプルを開く」</b>から始めてください（教材用合成データ。実験データではありません）。"
-            "解析の流れ：画像・試料情報 → レーン・バンドROI → 背景補正・定量 → QC → 正規化 → 統計 → Figure。"
+            "解析の流れ：画像・試料情報 → レーン・バンドの測定領域（ROI）→ 背景補正 → QC → 正規化 → 統計 → Figure。"
+            "左下の<b>進捗</b>に、未入力の項目と次にすることが表示されます。"
             "どの画面でも <b>⌘Z / Ctrl+Z</b> で元に戻せます。", lesson=7)
         lay.addWidget(self.hint)
 
@@ -129,9 +130,10 @@ class ImagesPage(LazyRefreshMixin, QWidget):
         lay = QVBoxLayout(self)
         lay.addWidget(page_header("画像・試料情報", "画像を登録し、タンパク質名・膜・露光などの情報と、試料（sample_id・群・反復）を入力します。"))
         self.hint = HintBox(
-            "Target と Loading control が別の画像でも、<b>同じ sample_id</b> をレーンに割り当てれば対応づけられます。"
-            "<b>biological replicate（bio_rep）</b>は独立な個体・培養など統計の n になる単位、"
-            "<b>technical replicate（tech_rep）</b>は同じ試料の繰り返しロードで、n には数えません。"
+            "Target とローディングコントロール（loading control）が別の画像でも、<b>同じ試料ID（sample_id）</b>をレーンに割り当てれば対応づけられます。"
+            "<b>生物学的反復（biological replicate, bio_rep）</b>は独立な個体・培養など統計の n になる単位、"
+            "<b>技術的反復（technical replicate, tech_rep）</b>は同じ試料の繰り返しロードで、n には数えません。"
+            "<b>実験単位ID（subject_id）</b>は同じ個体・試料を複数条件で測ったときだけ使います（対応のある検定）。"
             "同じ膜の別露光は独立な反復ではないので、定量には1枚だけ使います（「定量に使う」）。", lesson=5)
         lay.addWidget(self.hint)
         split = QSplitter(Qt.Vertical)

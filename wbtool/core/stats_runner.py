@@ -73,7 +73,9 @@ def run_stats(settings: AnalysisSettings, norm: NormalizationResult) -> StatsOut
             out.description = (f"統計：{scale} について {r.test_name}（両側、解析単位は生物学的反復、"
                                f"{r.group_a} n = {r.n_a}、{r.group_b} n = {r.n_b}）。")
         return out
-    groups = [g for g in settings.stat_groups if g in set(bio["group"])] if len(bio) else []
+    present = list(dict.fromkeys(bio["group"])) if len(bio) else []
+    # 群を明示的に選んでいない場合は、画面の表示（全群にチェック）と同じく全群を使う
+    groups = [g for g in settings.stat_groups if g in present] if settings.stat_groups else present
     m = multi_group_test(bio, val, groups, settings.stat_goal, settings.control_group,
                          settings.stat_equal_var, settings.stat_design)
     out = StatsOutcome(m.ok, "multi", m.title, m.refusal, multi=m, notes=list(m.notes))

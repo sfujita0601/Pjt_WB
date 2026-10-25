@@ -668,7 +668,7 @@ class RoiPage(LazyRefreshMixin, QWidget):
     def _fill_lane_table(self, im) -> None:
         t = self.tbl_lanes
         t.clear()
-        cols = ["lane_id", "sample_id", "group", "bio_rep", "x", "y", "幅", "高さ"]
+        cols = ["レーン", "試料ID（sample_id）", "群", "生物学的反復", "x", "y", "幅", "高さ"]
         t.setColumnCount(len(cols))
         t.setHorizontalHeaderLabels(cols)
         lanes = im.lanes if im else []
@@ -692,7 +692,7 @@ class RoiPage(LazyRefreshMixin, QWidget):
                 it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                 t.setItem(r, c, it)
 
-    BAND_COLS = ["band_id", "lane", "sample_id", "タンパク質", "背景法", "N（画素）", "Σp（補正前）", "b（背景）",
+    BAND_COLS = ["バンド", "レーン", "試料ID", "タンパク質", "背景法", "N（画素）", "Σp（補正前）", "b（背景）",
                  "S（補正後）", "除外", "除外理由", "警告"]
 
     def _fill_band_table(self, im) -> None:
