@@ -114,7 +114,52 @@ def test_unimplemented_test_refused():
 
 
 def test_paired_missing_counted_once():
-    bio = pd.DataFrame({"group": ["C", "C", "C", "T", "T", "T"], "bio_rep": ["R1", "R2", "R3"] * 2,
-                        "ratio": [1.0, 1.1, 0.9, 1.5, np.nan, 1.3]})
+    bio = pd.DataFrame({"group": ["C", "C", "C", "T", "T", "T"], "bio_rep": ["C1", "C2", "C3", "T1", "T2", "T3"],
+                        "subject_id": ["P1", "P2", "P3"] * 2, "ratio": [1.0, 1.1, 0.9, 1.5, np.nan, 1.3]})
     r = two_group_test(bio, "ratio", "C", "T", "paired")
     assert r.n_pairs == 2 and r.n_missing == 1
+
+
+def test_paired_requires_subject_id_not_just_same_day():
+    bio = pd.DataFrame({"group": ["C", "C", "T", "T"], "bio_rep": ["R1", "R2", "R1", "R2"],
+                        "batch_id": ["D1", "D2", "D1", "D2"], "subject_id": ["", "", "", ""], "ratio": [1, 1.2, 2, 2.1]})
+    r = two_group_test(bio, "ratio", "C", "T", "paired")
+    assert not r.ok and "subject_id" in r.refusal
+
+
+def test_log2_refuses_nonpositive():
+    bio = pd.DataFrame({"group": ["C", "C", "T", "T"], "bio_rep": ["C1", "C2", "T1", "T2"],
+                        "ratio": [1.0, 1.1, -0.2, 2.0], "log2_ratio": [0.0, np.log2(1.1), np.nan, 1.0]})
+    r = two_group_test(bio, "log2_ratio", "C", "T", "welch")
+    assert not r.ok and "擬似的" in r.refusal
+
+
+def test_log2_values_and_fold(tmp_path):
+    p, *_ = build_project(tmp_path, [1000, 1200, 2000, 2600], [5000, 6000, 5000, 6500],
+                          ["C", "C", "T", "T"], ["C1", "C2", "T1", "T2"])
+    m = measure_project(p, ImageCache()).table
+    res = normalize(m, "Target", "Actin", "C", p.samples)
+    bio = res.bio_table
+    ratios = np.array([0.2, 0.2, 0.4, 0.4])
+    assert np.allclose(bio["log2_ratio"], np.log2(ratios))
+    assert np.allclose(bio["log2_fold"], [0, 0, 1, 1])
+    assert np.allclose(bio["fold_geo"], [1, 1, 2, 2])
+    assert res.control_log2_mean == pytest.approx(np.log2(0.2))
+
+
+def test_mixed_bit_depth_blocks(tmp_path):
+    import tifffile
+    from wbtool.core.synthetic import make_blot
+    from tests.helpers import add_image, add_lanes_bands
+    p, *_ = build_project(tmp_path, [1000, 2000], [5000, 5000], ["C", "T"], ["C1", "T1"])
+    # 2 番目の試料の Target だけを 8-bit 画像で測ったことにする
+    b8 = make_blot([40, 80], background=200, dtype=np.uint8)
+    im8 = add_image(p, tmp_path / "t8.tif", b8.data, "Target", membrane="M2")
+    p.images[0].lanes[1].sample_id = ""
+    add_lanes_bands(im8, b8.lanes[1:], b8.bands[1:], ["S2"])
+    m = measure_project(p, ImageCache()).table
+    res = normalize(m, "Target", "Actin", "C", p.samples)
+    assert res.blocking and "8-bit" in res.blocking[0]
+    st = res.sample_table
+    assert st.loc[st.sample_id == "S2", "num_bit_depth"].iloc[0] == 8
+    assert "階調スケール" in st.loc[st.sample_id == "S2", "caution"].iloc[0]

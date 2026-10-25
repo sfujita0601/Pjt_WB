@@ -14,7 +14,7 @@ from .quant import estimate_background, measure_band
 
 MEASUREMENT_COLUMNS = [
     "image_id", "band_id", "lane_id", "sample_id", "group", "bio_rep", "tech_rep", "protein",
-    "experiment_id", "blot_id", "membrane_id", "exposure_id", "image_included", "excluded", "exclude_reason",
+    "experiment_id", "blot_id", "membrane_id", "exposure_id", "bit_depth", "image_included", "excluded", "exclude_reason",
     "polarity", "sign", "roi_x", "roi_y", "roi_w", "roi_h", "n_pixels",
     "raw_sum", "raw_mean", "bg_method", "bg_method_label", "bg_value", "bg_sum", "bg_n_pixels", "bg_rects",
     "corrected", "n_low_extreme", "n_high_extreme", "roi_clipped", "warnings",
@@ -62,7 +62,7 @@ def measure_one(project: Project, im: ImageRecord, band: BandROI, data: np.ndarr
         "sample_id": sample_id, "group": s.group if s else "", "bio_rep": s.bio_rep if s else "",
         "tech_rep": s.tech_rep if s else "", "protein": im.band_protein(band),
         "experiment_id": im.experiment_id, "blot_id": im.blot_id, "membrane_id": im.membrane_id,
-        "exposure_id": im.exposure_id, "image_included": im.include,
+        "exposure_id": im.exposure_id, "bit_depth": im.bit_depth, "image_included": im.include,
         "excluded": band.excluded, "exclude_reason": band.exclude_reason,
         "polarity": im.polarity, "sign": m.sign,
         "roi_x": band.rect.x, "roi_y": band.rect.y, "roi_w": band.rect.w, "roi_h": band.rect.h,

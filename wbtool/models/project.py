@@ -27,6 +27,20 @@ BG_LABELS = {
     BG_NONE: "背景補正なし",
 }
 
+ROLE_TARGET = "target"
+ROLE_LOADING = "loading_control"
+ROLE_PHOSPHO = "phospho"
+ROLE_TOTAL = "total"
+ROLE_OTHER = "other"
+PROTEIN_ROLES = (ROLE_TARGET, ROLE_LOADING, ROLE_PHOSPHO, ROLE_TOTAL, ROLE_OTHER)
+ROLE_LABELS = {
+    ROLE_TARGET: "Target（目的タンパク質）",
+    ROLE_LOADING: "ローディングコントロール（loading control）",
+    ROLE_PHOSPHO: "リン酸化体（phospho）",
+    ROLE_TOTAL: "総量（total）",
+    ROLE_OTHER: "その他・未設定",
+}
+
 QC_PENDING = "未確認"
 QC_DECISIONS = (QC_PENDING, "採用", "除外", "再撮影推奨")
 
@@ -148,6 +162,8 @@ class Sample:
     group: str = ""
     bio_rep: str = ""      # biological replicate ID（独立な単位。対応 t 検定ではこの ID で対応づける）
     tech_rep: str = ""     # technical replicate ID（同一試料の繰り返しロード等。独立な n に数えない）
+    subject_id: str = ""   # 同一の実験単位（個体・同一試料）。対応のある検定はこの ID で対応づける
+    batch_id: str = ""     # 実験日・ブロットなどのまとまり（記録用。これだけでは対応ありとみなさない）
     notes: str = ""
 
 
@@ -172,10 +188,15 @@ class AnalysisSettings:
     control_group: str = ""
     stat_group_a: str = ""
     stat_group_b: str = ""
-    stat_test: str = "welch"          # "welch" | "paired"
-    stat_value: str = "fold"          # "fold" | "ratio"
+    stat_test: str = "welch"          # 2群："welch" | "paired"（3群以上は stat_goal 等から決まる）
+    stat_value: str = "ratio"         # "ratio" | "log2_ratio"（fold は ratio と同じ検定結果）
+    stat_goal: str = "two"            # "two" | "vs_control" | "all_pairs"
+    stat_design: str = "independent"  # "independent" | "paired"
+    stat_equal_var: bool = False      # 3群以上で等分散を仮定するか（既定：仮定しない）
+    stat_groups: list[str] = field(default_factory=list)   # 3群以上の比較に含める群
     figure: dict[str, Any] = field(default_factory=dict)
     checklist: dict[str, bool] = field(default_factory=dict)   # QC 学生チェックリストの確認状態
+    protein_roles: dict[str, str] = field(default_factory=dict)  # タンパク質名 → 役割（ROLE_*）
 
 
 @dataclass

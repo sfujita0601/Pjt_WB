@@ -8,7 +8,7 @@ dependencies = [
     "PySide6>=6.6",
     "pyqtgraph>=0.13.7",
     "numpy>=1.26",
-    "scipy>=1.11",
+    "scipy>=1.15",
     "pandas>=2.1",
     "matplotlib>=3.8",
     "tifffile>=2023.9",
@@ -16,7 +16,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "statsmodels>=0.14", "pingouin>=0.5"]   # statsmodels/pingouin は統計の照合テスト用
 
 [project.scripts]
 wbtool = "wbtool.app.main:main"
@@ -33,3 +33,6 @@ wbtool = ["resources/lessons/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 130

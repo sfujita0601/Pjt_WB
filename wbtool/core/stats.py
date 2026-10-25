@@ -75,9 +75,10 @@ ASSUMPTIONS = {
         "比（ratio/fold）は右に裾を引く分布になりやすい。対数変換の要否は事前に決めておく（本ツールは変換しない）。",
     ],
     "paired": [
-        "同じ bio_rep ID を持つ2群の値が対応していること（同じ個体・同じ実験日など）。",
+        "同じ subject_id を持つ2群の値が、同一の実験単位（同じ個体・同じ試料）に由来すること。"
+        "同じ日に測った・同じブロットにあるというだけでは対応ありとみなさない。",
         "対ごとの差がおおむね正規分布に従うこと。",
-        "対が欠けている bio_rep は解析から除外される。",
+        "対が欠けている subject_id は解析から除外される。",
     ],
 }
 
@@ -111,12 +112,12 @@ def welch_test(a, b, group_a: str = "A", group_b: str = "B") -> TestResult:
 
 
 def paired_test(a: dict, b: dict, group_a: str = "A", group_b: str = "B") -> TestResult:
-    """a, b は {bio_rep: 値}。共通の bio_rep のみを対として用いる。"""
+    """a, b は {subject_id: 値}。共通の subject_id のみを対として用いる。"""
     keys = [k for k in a if k in b and np.isfinite(a[k]) and np.isfinite(b[k])]
     missing = len(set(a) ^ set(b)) + sum(1 for k in a if k in b and k not in keys)
     r = TestResult("対応のある t 検定", False, group_a, group_b, len(a), len(b), len(keys), n_missing=missing)
     if len(keys) < 2:
-        r.refusal = "対になった biological replicate が2組以上必要です（両群で同じ bio_rep ID を使ってください）。"
+        r.refusal = "対になった実験単位が2組以上必要です（両群で同じ subject_id を入力してください）。"
         return r
     d = np.array([b[k] - a[k] for k in keys], float)
     sd = d.std(ddof=1)
@@ -132,7 +133,7 @@ def paired_test(a: dict, b: dict, group_a: str = "A", group_b: str = "B") -> Tes
     r.mean_diff, r.ci_low, r.ci_high = float(d.mean()), float(d.mean() - tcrit * se), float(d.mean() + tcrit * se)
     r.effect_name, r.effect_size = "d_z（差の平均 ÷ 差の SD）", float(d.mean() / sd)
     if missing:
-        r.notes.append(f"対が揃わない bio_rep が {missing} 個あり、除外しました。")
+        r.notes.append(f"対が揃わない subject_id が {missing} 個あり、除外しました。")
     if n < 3:
         r.notes.append("対の数が 3 未満です。検定結果はきわめて不安定です。")
     return r
@@ -153,22 +154,40 @@ def two_group_test(bio: pd.DataFrame, value_col: str, group_a: str, group_b: str
                           refusal="bio_rep が未入力の行があり、独立な単位が不明です。試料表を修正してください。")
     if sub.duplicated(["group", "bio_rep"]).any():
         return TestResult(name, False, group_a, group_b, refusal="同じ群に同じ bio_rep が重複しています。")
-    a = sub[sub["group"] == group_a].set_index("bio_rep")[value_col]
-    b = sub[sub["group"] == group_b].set_index("bio_rep")[value_col]
-    n_missing = int(a.isna().sum() + b.isna().sum())
+    if value_col.startswith("log2") and sub[value_col].isna().any():
+        return TestResult(name, False, group_a, group_b,
+                          refusal="log2 変換できない値（比が 0 以下または欠損）があります。0 や負の値を擬似的な正の値に"
+                                  "置き換えることはしません。比（線形スケール）で解析するか、該当バンドの測定を見直してください。")
+    subj = sub["subject_id"].astype(str) if "subject_id" in sub else pd.Series("", index=sub.index)
     if test == "welch":
+        a = sub[sub["group"] == group_a][value_col]
+        b = sub[sub["group"] == group_b][value_col]
         r = welch_test(a.values, b.values, group_a, group_b)
-        shared = set(a.index) & set(b.index)
+        sa = set(subj[sub["group"] == group_a]) - {""}
+        sb = set(subj[sub["group"] == group_b]) - {""}
+        shared = sa & sb
         if shared:
             r.notes.append(
-                f"両群に同じ bio_rep ID（{', '.join(sorted(map(str, shared)))}）があります。"
-                "同じ個体・同じ実験日の対応がある設計なら「対応のある t 検定」が適切です。"
-            )
-        r.n_missing += n_missing
+                f"両群に同じ subject_id（{', '.join(sorted(shared))}）があります。"
+                "同じ個体・同じ試料を両条件で測った設計なら「対応のある t 検定」が適切です。")
+        r.n_missing += int(a.isna().sum() + b.isna().sum())
     else:
-        # 欠損値の bio_rep は対が揃わないものとして paired_test 側で1回だけ数える
+        sa = sub[sub["group"] == group_a]
+        sb = sub[sub["group"] == group_b]
+        if (subj.loc[sa.index] == "").any() or (subj.loc[sb.index] == "").any():
+            return TestResult(name, False, group_a, group_b,
+                              refusal="対応のある検定には、同一の実験単位（個体・試料）を示す subject_id がすべての行に必要です。"
+                                      "同じ日に測った・同じブロットにあるというだけでは対応ありとみなしません。試料表に subject_id を入力してください。")
+        if sa["subject_id"].duplicated().any() or sb["subject_id"].duplicated().any():
+            return TestResult(name, False, group_a, group_b,
+                              refusal="同じ群の中で subject_id が重複しています。1つの群で1つの実験単位は1回だけ測る前提です。")
+        a = sa.set_index("subject_id")[value_col]
+        b = sb.set_index("subject_id")[value_col]
+        # 欠損値の subject_id は対が揃わないものとして paired_test 側で1回だけ数える
         r = paired_test(a.dropna().to_dict(), b.dropna().to_dict(), group_a, group_b)
     r.notes.extend(ASSUMPTIONS[test])
-    if value_col == "fold":
-        r.notes.append("fold は全値を同じ定数（Control 平均）で割った値なので、比（ratio）で検定しても p 値は同じです。")
+    if value_col in ("fold", "log2_fold"):
+        r.notes.append("fold／log2_fold は全値を同じ定数で割った（引いた）値なので、比／log2_ratio で検定しても p 値は同じです。")
+    if value_col.startswith("log2"):
+        r.notes.append("log2 スケールの差は比の倍率に対応します：2^(差) が群 B の群 A に対する幾何平均の比です。")
     return r
