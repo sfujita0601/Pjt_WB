@@ -811,16 +811,16 @@ class RoiPage(LazyRefreshMixin, QWidget):
         if im is None or not im.bands:
             QMessageBox.information(self, "近傍背景", "バンド ROI がまだありません。")
             return
-        hs = sorted(b.rect.h for b in im.bands)
-        h = hs[len(hs) // 2]
-        gap = round(h * self.spn_gap_pct.value() / 100)
-        height = max(round(h * self.spn_bgh_pct.value() / 100), 1)
+        # h はバンド ROI の高さの中央値。換算は四捨五入（0.5 は切り上げ）
+        h = float(np.median([b.rect.h for b in im.bands]))
+        gap = int(math.floor(h * self.spn_gap_pct.value() / 100 + 0.5))
+        height = max(int(math.floor(h * self.spn_bgh_pct.value() / 100 + 0.5)), 1)
         if (im.bg_gap, im.bg_height) == (gap, height):
             return
         old = (im.bg_gap, im.bg_height)
         im.bg_gap, im.bg_height = gap, height
         self.ctrl.commit("近傍背景パラメータの変更（ROI 高さに対する比率）",
-                         f"{im.image_id}: h={h}px、間隔 {self.spn_gap_pct.value()}%・高さ {self.spn_bgh_pct.value()}% → "
+                         f"{im.image_id}: h={h:g}px、間隔 {self.spn_gap_pct.value()}%・高さ {self.spn_bgh_pct.value()}% → "
                          f"(間隔, 高さ) {old} → {(gap, height)} px")
 
     def _on_bg_params(self) -> None:

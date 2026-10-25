@@ -96,9 +96,8 @@ class QuantPage(LazyRefreshMixin, QWidget):
             t = self.tbl_img
             t.setRowCount(len(p.images))
             for r, im in enumerate(p.images):
-                hs = sorted(b.rect.h for b in im.bands)
-                hmed = hs[len(hs) // 2] if hs else 0
-                ratio = f"間隔 {im.bg_gap / hmed:.0%}・高さ {im.bg_height / hmed:.0%}（h = {hmed} px）" if hmed else "—"
+                hmed = float(pd.Series([b.rect.h for b in im.bands]).median()) if im.bands else 0
+                ratio = f"間隔 {im.bg_gap / hmed:.0%}・高さ {im.bg_height / hmed:.0%}（h = {hmed:g} px）" if hmed else "—"
                 for c, v in ((0, im.image_id), (1, im.protein_target), (2, f"{im.bit_depth}"), (8, ratio),
                              (9, str(len(im.bg_rois))), (10, str(len(im.bands)))):
                     it = QTableWidgetItem(v)

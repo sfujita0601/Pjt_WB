@@ -281,13 +281,17 @@ class MainWindow(QMainWindow):
         try:
             files = export_all(ctrl.project, ctrl.measurements(), res.sample_table, res.bio_table, data, folder)
             from matplotlib.figure import Figure
-            from ..core.figure import figure_caption, plot_groups, save_figure
+            from ..core.figure import plot_groups, save_figure
             from ..core.stats_runner import run_stats, stats_table_csv
             out = run_stats(ctrl.project.settings, res)
-            if out.ok:
+            confirmed = self.pages["stats"][1].chk_confirm.isChecked()
+            if out.ok and confirmed:
                 p = Path(folder) / "stats_results.csv"
                 stats_table_csv(out, p)
                 files.append(str(p))
+            elif out.ok:
+                # ［統計］画面と同じく、割当てを確認していない検定結果は出力しない
+                out = type(out)(False, out.kind, refusal="［統計］画面で割当てを確認していないため、検定結果は出力していません。")
             if len(res.bio_table) and not res.blocking:
                 st = self.pages["figure"][1].style()
                 ann = out.annotations if (st.show_stats and out.ok) else None
@@ -296,9 +300,7 @@ class MainWindow(QMainWindow):
                     p = Path(folder) / f"figure.{ext}"
                     save_figure(fig, str(p), dpi=st.dpi)
                     files.append(str(p))
-                s = ctrl.project.settings
-                cap = figure_caption(res.bio_table, st, out.description if ann else "",
-                                     f"正規化：{s.numerator_protein} ÷ {s.denominator_protein}、対照群 {s.control_group or '未設定'}。")
+                cap = self.pages["figure"][1].caption_text(res.bio_table, st, out)
                 p = Path(folder) / "figure_caption.txt"
                 p.write_text(cap + "\n", encoding="utf-8")
                 files.append(str(p))
@@ -306,7 +308,12 @@ class MainWindow(QMainWindow):
             error_box(self, "出力できません", str(e), "出力先フォルダーに書き込めるか確認してください。")
             return
         ctrl.project.log("結果を一括出力", folder)
-        QMessageBox.information(self, "結果を一括出力", "次のファイルを出力しました：\n" + "\n".join(Path(f).name for f in files))
+        msg = "次のファイルを出力しました：\n" + "\n".join(Path(f).name for f in files)
+        if not out.ok and out.refusal:
+            msg += f"\n\n統計結果：{out.refusal}"
+        if res.blocking:
+            msg += "\n\nFigure：統計・Figure を止める問題があるため出力していません。"
+        QMessageBox.information(self, "結果を一括出力", msg)
 
     def about(self) -> None:
         QMessageBox.about(self, "このアプリについて",

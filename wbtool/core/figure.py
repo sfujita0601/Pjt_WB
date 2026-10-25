@@ -111,13 +111,17 @@ def ordered_groups(bio: pd.DataFrame, style: FigureStyle) -> list[str]:
 
 
 def plot_groups(bio: pd.DataFrame, style: FigureStyle, fig: Figure | None = None,
-                annotations: list[StatAnnotation] | None = None, ax=None) -> Figure:
-    """生物学的反復の値（bio_table）を群ごとに描く。ax を渡すとその軸に描く（複合 Figure 用）。"""
+                annotations: list[StatAnnotation] | None = None, ax=None, resize: bool = True) -> Figure:
+    """生物学的反復の値（bio_table）を群ごとに描く。ax を渡すとその軸に描く（複合 Figure 用）。
+
+    画面に埋め込んだ Figure では resize=False にする（キャンバスの大きさを変えない）。
+    """
     if ax is None:
         if fig is None:
             fig = Figure(figsize=(style.width_in, style.height_in), dpi=100)
         fig.clear()
-        fig.set_size_inches(style.width_in, style.height_in)
+        if resize:
+            fig.set_size_inches(style.width_in, style.height_in)
     family = style.font_family or (japanese_font_candidates() or ["DejaVu Sans"])[0]
     with matplotlib.rc_context({"font.family": family, "font.size": style.font_size, "svg.fonttype": "none",
                                 "pdf.fonttype": 42, "axes.unicode_minus": False}):
@@ -199,7 +203,8 @@ def figure_caption(bio: pd.DataFrame, style: FigureStyle, stats_desc: str = "", 
     groups = ordered_groups(bio, style)
     ns = ", ".join(f"{style.group_labels.get(g, g)} n = {int(bio.loc[bio['group'] == g, style.value_col].notna().sum())}"
                    for g in groups)
-    center = "中央値と四分位範囲（箱）" if style.kind == "box_dots" else f"平均 ± {style.error_bar.upper() if style.error_bar != 'ci95' else '95% 信頼区間'}"
+    center = ("中央値と四分位範囲（箱）、四分位範囲の 1.5 倍以内の最小値・最大値（ひげ。外れ値の記号は表示せず全点を表示）"
+              if style.kind == "box_dots" else f"平均 ± {style.error_bar.upper() if style.error_bar != 'ci95' else '95% 信頼区間'}")
     parts = [
         f"縦軸：{VALUE_LABELS.get(style.value_col, style.value_col)}。",
         f"点は個々の生物学的反復（biological replicate）、{center}を示す（{ns}）。",

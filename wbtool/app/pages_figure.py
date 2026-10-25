@@ -259,12 +259,9 @@ class FigurePage(LazyRefreshMixin, QWidget):
             else:
                 warns.append(f"p 値を表示できません：{out.refusal or '［統計］で設定を確認してください。'}")
         self.lbl_warn.setText("\n".join(warns))
-        norm_desc = (f"正規化：{self.ctrl.project.settings.numerator_protein} ÷ {self.ctrl.project.settings.denominator_protein}"
-                     f"（同じ試料のバンドの背景補正後積分値の比）、対照群 {self.ctrl.project.settings.control_group or '未設定'}。")
-        stats_desc = out.description if (out.ok and st.show_stats) else ""
-        self.txt_caption.setPlainText(figure_caption(bio, st, stats_desc, norm_desc))
+        self.txt_caption.setPlainText(self.caption_text(bio, st, out))
         if self.tabs.currentIndex() == 0:
-            plot_groups(bio, st, self.fig, annotations)
+            plot_groups(bio, st, self.fig, annotations, resize=False)
             self.canvas.draw_idle()
         else:
             data = {iid: d for iid in self._selected_images() if (d := self.ctrl.image_data(iid)) is not None}
@@ -272,6 +269,14 @@ class FigurePage(LazyRefreshMixin, QWidget):
                                                       self.sp_margin.value(), self.cmb_levels.currentData(),
                                                       self.chk_rois.isChecked(), fig=self.fig2, resize=False)
             self.canvas2.draw_idle()
+
+    def caption_text(self, bio, st: FigureStyle, out) -> str:
+        """図の説明文。画面表示と一括出力で同じ文を使う。"""
+        s = self.ctrl.project.settings
+        norm_desc = (f"正規化：{s.numerator_protein} ÷ {s.denominator_protein}"
+                     f"（同じ試料のバンドの背景補正後積分値の比）、対照群 {s.control_group or '未設定'}。")
+        stats_desc = out.description if (out.ok and st.show_stats) else ""
+        return figure_caption(bio, st, stats_desc, norm_desc)
 
     def current_figure(self) -> Figure:
         st = self.style()

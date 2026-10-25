@@ -63,7 +63,7 @@ def make_blot(amplitudes, *, width: int | None = None, height: int = 120, lane_w
 
 
 def example_dataset(seed: int = 1) -> dict:
-    """学習用の Target / Loading control 画像一式（8 レーン：Control×4, Treated×4）。
+    """学習用の Target / ローディングコントロール画像一式（8 レーン：Control×4, Treated×4）。
 
     真の比（Target量/LC量）：Control ≈ 1.0、Treated ≈ 2.0（biological ばらつきあり）。
     """

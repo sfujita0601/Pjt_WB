@@ -23,7 +23,7 @@ LESSONS = [
     ("01_pixel_values.md", "01 バンド濃度と画素値"),
     ("02_roi_profile.md", "02 ROI とレーンプロファイル"),
     ("03_background.md", "03 背景補正"),
-    ("04_loading_control.md", "04 Loading control の意味"),
+    ("04_loading_control.md", "04 ローディングコントロールの意味"),
     ("05_replicates_stats.md", "05 反復と統計解析"),
     ("06_saturation_limits.md", "06 過露光・飽和・スキャナーの限界"),
     ("07_records_figures.md", "07 実験記録と Figure 作成"),
@@ -31,7 +31,7 @@ LESSONS = [
 DOCS = [
     ("user_guide_ja.md", "操作マニュアル（最短手順・よくある間違い）"),
     ("theory_ja.md", "理論：積分・背景・正規化・統計"),
-    ("protocol_ja.md", "研究室標準プロトコル（スキャン〜報告）"),
+    ("protocol_ja.md", "推奨プロトコル（案）：スキャン〜報告"),
     ("validation_imagej.md", "Fiji/ImageJ との照合手順"),
 ]
 
