@@ -11,7 +11,7 @@ from .. import __version__
 from ..models.project import BG_LABELS, Project, Sample
 from .imageio import dtype_max
 
-SAMPLE_COLUMNS = ["sample_id", "group", "bio_rep", "tech_rep", "notes", "image_id", "lane_id"]
+SAMPLE_COLUMNS = ["sample_id", "group", "bio_rep", "tech_rep", "subject_id", "batch_id", "notes", "image_id", "lane_id"]
 
 
 def samples_to_csv(project: Project, path: str | Path) -> None:
@@ -19,11 +19,11 @@ def samples_to_csv(project: Project, path: str | Path) -> None:
     for s in project.samples:
         lanes = [(im.image_id, l.lane_id) for im in project.images for l in im.lanes if l.sample_id == s.sample_id]
         if not lanes:
-            rows.append({"sample_id": s.sample_id, "group": s.group, "bio_rep": s.bio_rep, "tech_rep": s.tech_rep,
-                         "notes": s.notes, "image_id": "", "lane_id": ""})
+            lanes = [("", "")]
         for iid, lid in lanes:
             rows.append({"sample_id": s.sample_id, "group": s.group, "bio_rep": s.bio_rep, "tech_rep": s.tech_rep,
-                         "notes": s.notes, "image_id": iid, "lane_id": lid})
+                         "subject_id": s.subject_id, "batch_id": s.batch_id, "notes": s.notes,
+                         "image_id": iid, "lane_id": lid})
     pd.DataFrame(rows, columns=SAMPLE_COLUMNS).to_csv(path, index=False, encoding="utf-8-sig")
 
 
@@ -49,7 +49,7 @@ def samples_from_csv(project: Project, path: str | Path) -> list[str]:
             n_new += 1
         else:
             n_upd += 1
-        for col in ("group", "bio_rep", "tech_rep", "notes"):
+        for col in ("group", "bio_rep", "tech_rep", "subject_id", "batch_id", "notes"):
             if col in df.columns and r[col].strip() != "":
                 setattr(s, col, r[col].strip())
         iid, lid = r.get("image_id", "").strip(), r.get("lane_id", "").strip()

@@ -123,3 +123,36 @@ def test_example_project_reproduces_truth(tmp_path):
     got = res.bio_table.sort_values(["group", "bio_rep"])["fold"].values
     # ノイズ・背景傾斜・ぼかしがあっても真の fold に近いこと（教材として妥当か）
     assert np.allclose(got, true_fold, rtol=0.08)
+
+
+def test_progress_reports_missing_items(tmp_path):
+    from wbtool.core.normalize import normalize
+    from wbtool.core.progress import BLOCKED, DONE, TODO, compute_progress
+    p, *_ = build_project(tmp_path, [1000, 2000], [5000, 5000], ["C", "T"], ["C1", ""])
+    m = measure_project(p, ImageCache()).table
+    norm = normalize(m, "", "", "", p.samples)
+    steps = {s.title: s for s in compute_progress(p, m, norm, [], False)}
+    assert steps["試料情報（群・反復）"].status == TODO
+    assert "S2" in steps["試料情報（群・反復）"].details[0]
+    assert steps["正規化"].status == TODO
+    p.samples[1].bio_rep = "T1"
+    p.settings.numerator_protein, p.settings.denominator_protein, p.settings.control_group = "Target", "Actin", "C"
+    norm = normalize(m, "Target", "Actin", "C", p.samples)
+    steps = {s.title: s for s in compute_progress(p, m, norm, [], True)}
+    assert steps["正規化"].status == DONE and steps["統計"].status == DONE
+    norm.blocking = ["混在"]
+    steps = {s.title: s for s in compute_progress(p, m, norm, [], False)}
+    assert steps["正規化"].status == BLOCKED
+
+
+def test_example_3groups_runs_multi_group_stats(tmp_path):
+    from wbtool.core.examples import build_example_project
+    from wbtool.core.normalize import normalize
+    from wbtool.core.stats_runner import run_stats
+    p = build_example_project(tmp_path, kind="3groups")
+    m = measure_project(p, ImageCache()).table
+    s = p.settings
+    norm = normalize(m, s.numerator_protein, s.denominator_protein, s.control_group, p.samples)
+    assert len(norm.bio_table) == 12 and not norm.blocking
+    out = run_stats(s, norm)
+    assert out.ok and out.kind == "multi" and len(out.table) == 2

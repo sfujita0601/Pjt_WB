@@ -84,3 +84,22 @@ def example_dataset(seed: int = 1) -> dict:
                for i in range(8)]
     return {"target": target, "loading": lc, "target_overexposed": over, "samples": samples,
             "true_ratio": true_ratio, "lc_load": lc_load}
+
+
+def example_dataset_3groups(seed: int = 7) -> dict:
+    """3群（Control・DrugA・DrugB、各4生物学的反復）の教材用データ。真の比：1.0 / 1.5 / 2.5（ばらつきあり）。"""
+    rng = np.random.default_rng(seed)
+    groups = ["Control"] * 4 + ["DrugA"] * 4 + ["DrugB"] * 4
+    centers = {"Control": 1.0, "DrugA": 1.5, "DrugB": 2.5}
+    sds = {"Control": 0.10, "DrugA": 0.15, "DrugB": 0.35}
+    true_ratio = np.array([rng.normal(centers[g], sds[g]) for g in groups])
+    lc_load = rng.uniform(0.85, 1.15, len(groups))
+    target_amp = 6000 * lc_load * true_ratio / 2.5
+    lc_amp = 12000 * lc_load
+    common = dict(height=160, lane_width=30, lane_gap=12, band_height=12, background=52000.0,
+                  gradient=-15.0, noise_sd=300.0, blur_sigma=1.5, dtype=np.uint16)
+    target = make_blot(target_amp, band_y=70, seed=seed, **common)
+    lc = make_blot(lc_amp, band_y=74, seed=seed + 1, **common)
+    prefix = {"Control": "C", "DrugA": "A", "DrugB": "B"}
+    samples = [(f"S{i + 1}", g, f"{prefix[g]}{i % 4 + 1}", "1") for i, g in enumerate(groups)]
+    return {"target": target, "loading": lc, "samples": samples, "true_ratio": true_ratio, "lc_load": lc_load}

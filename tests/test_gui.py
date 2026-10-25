@@ -149,3 +149,99 @@ def test_learning_pages_load(win, app):
         assert (DOCS_DIR / f).exists(), f
     win.open_lesson(3)
     assert "背景" in win.pages["learn"][1].browser.toPlainText()
+
+
+@pytest.fixture
+def win3(app, tmp_path, monkeypatch):
+    monkeypatch.setattr(QMessageBox, "information", lambda *a, **k: QMessageBox.Ok)
+    monkeypatch.setattr(QMessageBox, "question", lambda *a, **k: QMessageBox.Yes)
+    from wbtool.app.main_window import MainWindow
+    from wbtool.core.examples import build_example_project
+    w = MainWindow()
+    w.show()
+    w.ctrl.new_project(build_example_project(tmp_path / "ex3", kind="3groups"))
+    app.processEvents()
+    yield w
+    w.ctrl.dirty = False
+    w.close()
+
+
+def test_stats_page_multi_group_guided(win3, app, tmp_path, monkeypatch):
+    page = win3.pages["stats"][1]
+    win3.goto("stats")
+    app.processEvents()
+    assert "Games–Howell" in page.lbl_method.text()
+    page.chk_confirm.setChecked(True)
+    txt = page.txt.toPlainText()
+    assert "Welch の一元配置 ANOVA" in txt and "調整済み p" in txt
+    page.chk_eqvar.setChecked(True)          # 等分散を仮定 → Dunnett
+    app.processEvents()
+    assert "Dunnett" in page.txt.toPlainText()
+    for b in page.grp_design.buttons():       # 対応あり3群 → 検定しない
+        if b.property("key") == "paired":
+            b.setChecked(True)
+    app.processEvents()
+    assert "検定しませんでした" in page.txt.toPlainText()
+    win3.ctrl.undo()
+    app.processEvents()
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(tmp_path / "st.csv"), ""))
+    page.chk_confirm.setChecked(False)
+    page.chk_confirm.setChecked(True)
+    page._export()
+    import pandas as pd
+    t = pd.read_csv(tmp_path / "st.csv")
+    assert {"p_adj", "diff", "ci_low", "method"} <= set(t.columns) and len(t) == 2
+
+
+def test_figure_with_stats_and_band_panel(win3, app, tmp_path, monkeypatch):
+    page = win3.pages["figure"][1]
+    win3.goto("figure")
+    app.processEvents()
+    page.chk_stats.setChecked(True)
+    page.cmb_err.setCurrentIndex(page.cmb_err.findData("sem"))
+    page._on_change()
+    app.processEvents()
+    cap = page.txt_caption.toPlainText()
+    assert "SEM" in cap and "調整済み" in cap and "生物学的反復" in cap
+    page.tabs.setCurrentIndex(1)
+    app.processEvents()
+    assert len(page._panel_rows) == 2
+    from PySide6.QtWidgets import QFileDialog
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(tmp_path / "comp.svg"), ""))
+    page._save("svg")
+    import json
+    rec = json.loads((tmp_path / "comp_bands.json").read_text(encoding="utf-8"))
+    assert len(rec["rows"]) == 2 and "sha256" in rec["rows"][0] and "crop" in rec["rows"][0]
+    assert (tmp_path / "comp_crop_IMG001.tif").exists()
+
+
+def test_validation_dialog_flow(win3, app, tmp_path, monkeypatch):
+    from PySide6.QtWidgets import QFileDialog
+    from wbtool.app.validation_dialog import ValidationDialog
+    from tests.test_validation import fake_fiji_csv
+    dlg = ValidationDialog(win3.ctrl)
+    monkeypatch.setattr(QFileDialog, "getSaveFileName", lambda *a, **k: (str(tmp_path / "m.ijm"), ""))
+    dlg._save_macro()
+    assert "makeRectangle" in (tmp_path / "m.ijm").read_text(encoding="utf-8")
+    p = win3.ctrl.project
+    fake_fiji_csv(p, "IMG001", win3.ctrl.image_data("IMG001"), tmp_path / "f.csv")
+    monkeypatch.setattr(QFileDialog, "getOpenFileName", lambda *a, **k: (str(tmp_path / "f.csv"), ""))
+    dlg._load_csv()
+    assert dlg.reports["IMG001"].all_match
+    assert "一致しました" in dlg.lbl.text()
+
+
+def test_progress_panel_and_roles(win3, app):
+    panel = win3.progress
+    panel.refresh()
+    titles = [panel.lst.item(i).text() for i in range(panel.lst.count())]
+    assert any("正規化" in t for t in titles)
+    page = win3.pages["norm"][1]
+    win3.goto("norm")
+    app.processEvents()
+    assert page.tbl_roles.rowCount() == 2
+    win3.ctrl.project.samples[0].bio_rep = ""
+    win3.ctrl.commit("test")
+    panel.refresh()
+    assert "S1" in panel.lbl_next.text() or "試料情報" in panel.lbl_next.text()

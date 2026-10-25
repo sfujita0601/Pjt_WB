@@ -6,13 +6,14 @@ from pathlib import Path
 from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QScrollArea, QSplitter, QTableWidget, QTableWidgetItem, QVBoxLayout,
     QWidget,
 )
 
 from ..core.export import samples_from_csv, samples_to_csv
 from ..core.imageio import SUPPORTED_SUFFIXES, ImageLoadError, load_image, sha256_file
 from ..models.project import POLARITY_BRIGHT, POLARITY_DARK, ImageRecord, Sample, now_iso
+from .terms import SAMPLE_FIELD_HELP
 from .widgets import HintBox, LazyRefreshMixin, error_box, page_header
 
 
@@ -109,10 +110,12 @@ class ProjectPage(LazyRefreshMixin, QWidget):
             self.ctrl.commit("プロジェクト名の変更", f"{old} → {name}")
 
 
-IMG_COLS = ["image_id", "状態", "タンパク質", "定量に使う", "極性", "experiment_id", "blot_id", "membrane_id",
-            "exposure_id", "メモ", "ファイル", "サイズ", "bit", "形式", "SHA-256（先頭12桁）", "登録日時"]
+IMG_COLS = ["画像ID（image_id）", "状態", "タンパク質", "定量に使う", "極性", "実験ID（experiment_id）", "ブロットID（blot_id）",
+            "膜ID（membrane_id）", "露光ID（exposure_id）", "メモ", "ファイル", "サイズ", "bit", "形式", "SHA-256（先頭12桁）", "登録日時"]
 EDITABLE_TEXT = {2: "protein_target", 5: "experiment_id", 6: "blot_id", 7: "membrane_id", 8: "exposure_id", 9: "notes"}
-SAMPLE_COLS = ["sample_id", "group", "bio_rep", "tech_rep", "notes", "使用レーン"]
+SAMPLE_ATTRS = ["sample_id", "group", "bio_rep", "tech_rep", "subject_id", "batch_id", "notes"]
+SAMPLE_COLS = ["試料ID（sample_id）", "群（group）", "生物学的反復（bio_rep）", "技術的反復（tech_rep）",
+               "実験単位ID（subject_id）", "バッチID（batch_id）", "メモ", "使用レーン"]
 
 
 class ImagesPage(LazyRefreshMixin, QWidget):
@@ -176,9 +179,26 @@ class ImagesPage(LazyRefreshMixin, QWidget):
         self.tbl_s.horizontalHeader().setStretchLastSection(True)
         self.tbl_s.verticalHeader().setVisible(False)
         self.tbl_s.itemChanged.connect(self._on_sample_item)
-        bl.addWidget(self.tbl_s)
-        note = QLabel("CSV の列：sample_id, group, bio_rep, tech_rep, notes［, image_id, lane_id］"
-                      "（image_id と lane_id があれば、そのレーンに sample_id を割り当てます）")
+        split_s = QSplitter(Qt.Horizontal)
+        split_s.addWidget(self.tbl_s)
+        help_html = "<b>入力欄の説明</b><table cellspacing='0' cellpadding='3'>" + "".join(
+            f"<tr><td valign='top'><b>{name}</b></td><td valign='top'>{desc}<br><span style='color:#666'>例：{ex}</span></td></tr>"
+            for name, desc, ex in SAMPLE_FIELD_HELP) + "</table>"
+        help_box = QLabel(help_html)
+        help_box.setWordWrap(True)
+        help_box.setTextFormat(Qt.RichText)
+        help_box.setAlignment(Qt.AlignTop)
+        help_box.setStyleSheet("background:#F7F7FA; border:1px solid #D8D8E0; padding:6px;")
+        scroll = QScrollArea()
+        scroll.setWidget(help_box)
+        scroll.setWidgetResizable(True)
+        scroll.setMinimumWidth(360)
+        split_s.addWidget(scroll)
+        split_s.setStretchFactor(0, 3)
+        split_s.setStretchFactor(1, 2)
+        bl.addWidget(split_s)
+        note = QLabel("CSV の列：sample_id, group, bio_rep, tech_rep, subject_id, batch_id, notes［, image_id, lane_id］"
+                      "（image_id と lane_id があれば、そのレーンに試料IDを割り当てます）")
         note.setStyleSheet("color:#555;")
         bl.addWidget(note)
         split.addWidget(bot)
@@ -240,9 +260,10 @@ class ImagesPage(LazyRefreshMixin, QWidget):
                 if l.sample_id:
                     usage.setdefault(l.sample_id, []).append(f"{im.image_id}/{l.lane_id}")
         for r, s in enumerate(p.samples):
-            for c, v in enumerate((s.sample_id, s.group, s.bio_rep, s.tech_rep, s.notes, ", ".join(usage.get(s.sample_id, [])))):
+            vals = [getattr(s, a) for a in SAMPLE_ATTRS] + [", ".join(usage.get(s.sample_id, []))]
+            for c, v in enumerate(vals):
                 it = QTableWidgetItem(v)
-                if c == 5:
+                if c == len(SAMPLE_ATTRS):
                     it.setFlags(it.flags() & ~Qt.ItemIsEditable)
                 t.setItem(r, c, it)
         t.resizeColumnsToContents()
@@ -407,10 +428,10 @@ class ImagesPage(LazyRefreshMixin, QWidget):
             return
         p = self.ctrl.project
         r, c = item.row(), item.column()
-        if r >= len(p.samples) or c > 4:
+        if r >= len(p.samples) or c >= len(SAMPLE_ATTRS):
             return
         s = p.samples[r]
-        attr = ["sample_id", "group", "bio_rep", "tech_rep", "notes"][c]
+        attr = SAMPLE_ATTRS[c]
         new = item.text().strip()
         old = getattr(s, attr)
         if new == old:

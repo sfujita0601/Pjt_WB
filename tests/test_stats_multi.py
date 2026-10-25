@@ -141,3 +141,21 @@ def test_multi_group_refusals():
     missing = bio.copy()
     missing.loc[0, "bio_rep"] = ""
     assert not multi_group_test(missing, "ratio", NAMES, "all_pairs").ok
+
+
+def test_stats_runner_routes_and_builds_annotations(tmp_path):
+    from wbtool.core.normalize import NormalizationResult
+    from wbtool.core.stats_runner import run_stats
+    from wbtool.models.project import AnalysisSettings
+    bio = bio_table()
+    norm = NormalizationResult(pd.DataFrame(), bio, 1.0)
+    s = AnalysisSettings(control_group="Control", stat_goal="vs_control", stat_groups=NAMES, stat_value="log2_ratio")
+    out = run_stats(s, norm)
+    assert out.ok and out.kind == "multi" and len(out.annotations) == 2
+    assert "調整済み" in out.description and "log2" in out.description
+    assert set(out.table["value"]) == {"log2_ratio"}
+    s2 = AnalysisSettings(stat_goal="two", stat_group_a="Control", stat_group_b="DrugA")
+    out2 = run_stats(s2, norm)
+    assert out2.ok and out2.kind == "two" and "Welch" in out2.method
+    norm.blocking = ["混在"]
+    assert not run_stats(s2, norm).ok

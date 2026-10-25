@@ -6,7 +6,8 @@ from pathlib import Path
 from PySide6.QtCore import QSettings, Qt
 from PySide6.QtGui import QAction, QActionGroup, QKeySequence
 from PySide6.QtWidgets import (
-    QFileDialog, QHBoxLayout, QLabel, QListWidget, QMainWindow, QMessageBox, QStackedWidget, QToolBar, QWidget,
+    QFileDialog, QHBoxLayout, QLabel, QListWidget, QMainWindow, QMessageBox, QStackedWidget, QToolBar, QVBoxLayout,
+    QWidget,
 )
 
 from .. import __version__
@@ -14,9 +15,13 @@ from ..core.examples import build_example_project
 from ..core.export import export_all
 from .controller import ProjectController
 from .learn_page import LearnPage
-from .pages_analysis import FigurePage, NormPage, QCPage, QuantPage, StatsPage
+from .pages_analysis import QCPage, QuantPage
+from .pages_figure import FigurePage
+from .pages_norm import NormPage
+from .pages_stats import StatsPage
 from .pages_data import ImagesPage, ProjectPage
 from .roi_page import RoiPage
+from .progress_panel import ProgressPanel
 from .widgets import HintBox, error_box
 
 PROJECT_FILTER = "Western blot プロジェクト (*.wbproj.json *.json)"
@@ -32,7 +37,7 @@ class MainWindow(QMainWindow):
         self.pages = {
             "project": ("プロジェクト", ProjectPage(self.ctrl)),
             "images": ("画像・試料情報", ImagesPage(self.ctrl)),
-            "roi": ("レーン・バンドROI", RoiPage(self.ctrl)),
+            "roi": ("レーン・バンド（ROI）", RoiPage(self.ctrl)),
             "quant": ("背景補正・定量", QuantPage(self.ctrl)),
             "norm": ("正規化", NormPage(self.ctrl)),
             "qc": ("QC", QCPage(self.ctrl)),
@@ -44,7 +49,7 @@ class MainWindow(QMainWindow):
         lay = QHBoxLayout(central)
         lay.setContentsMargins(4, 4, 4, 4)
         self.side = QListWidget()
-        self.side.setFixedWidth(170)
+        self.side.setMinimumHeight(330)
         self.side.setStyleSheet("QListWidget { font-size: 14px; } QListWidget::item { padding: 8px 6px; }"
                                 "QListWidget::item:selected { background: #2F6FB0; color: white; }")
         self.stack = QStackedWidget()
@@ -54,7 +59,15 @@ class MainWindow(QMainWindow):
             for hint in page.findChildren(HintBox):
                 hint.openLesson.connect(self.open_lesson)
         self.side.currentRowChanged.connect(self.stack.setCurrentIndex)
-        lay.addWidget(self.side)
+        left = QWidget()
+        ll = QVBoxLayout(left)
+        ll.setContentsMargins(0, 0, 0, 0)
+        ll.addWidget(self.side, 3)
+        self.progress = ProgressPanel(self.ctrl)
+        self.progress.goto.connect(self.goto)
+        ll.addWidget(self.progress, 2)
+        left.setFixedWidth(200)
+        lay.addWidget(left)
         lay.addWidget(self.stack, 1)
         self.setCentralWidget(central)
 
@@ -226,23 +239,35 @@ class MainWindow(QMainWindow):
     def open_example(self) -> None:
         if not self._confirm_discard():
             return
+        box = QMessageBox(self)
+        box.setWindowTitle("教材用サンプル")
+        box.setText("どちらのサンプルを開きますか？（どちらも教材用合成データで、実験由来ではありません）")
+        b2 = box.addButton("2群（Control / Treated、過露光の例つき）", QMessageBox.AcceptRole)
+        b3 = box.addButton("3群（Control / DrugA / DrugB、多重比較の練習）", QMessageBox.AcceptRole)
+        box.addButton(QMessageBox.Cancel)
+        box.exec()
+        if box.clickedButton() not in (b2, b3):
+            return
+        kind = "3groups" if box.clickedButton() is b3 else "2groups"
         folder = QFileDialog.getExistingDirectory(
             self, "教材用サンプル画像を書き出すフォルダーを選択（既存の同名ファイルはそのまま使います）",
             self.settings.value("last_dir", str(Path.home())))
         if not folder:
             return
         try:
-            proj = build_example_project(Path(folder) / "wbtool_example")
+            proj = build_example_project(Path(folder) / "wbtool_example", kind=kind)
         except Exception as e:  # noqa: BLE001
             error_box(self, "サンプルを作れません", str(e), "書き込み可能なフォルダーを選んでください。")
             return
         self.ctrl.new_project(proj)
         self.goto("roi")
+        detail = ("・IMG001：pERK（Target）\n・IMG002：Actin（ローディングコントロール）\n・3群×各4生物学的反復\n\n"
+                  if kind == "3groups" else
+                  "・IMG001：pERK（短い露光、定量に使う）\n・IMG002：Actin（ローディングコントロール）\n"
+                  "・IMG003：pERK の長い露光（飽和の例。定量には使わない設定）\n\n")
         QMessageBox.information(
             self, "教材用サンプル",
-            "教材用合成データ（実験由来ではありません）でプロジェクトを作りました。\n\n"
-            "・IMG001：pERK（短い露光、定量に使う）\n・IMG002：Actin（Loading control）\n"
-            "・IMG003：pERK の長い露光（飽和の例。定量には使わない設定）\n\n"
+            "教材用合成データ（実験由来ではありません）でプロジェクトを作りました。\n\n" + detail +
             "ROI は設定済みです。ROI を動かして値の変化を見たり、QC・正規化・統計・Figure を順に確認してください。\n"
             "保存する場合は「名前を付けて保存」を使います。")
 
@@ -255,16 +280,28 @@ class MainWindow(QMainWindow):
         res = ctrl.normalization()
         try:
             files = export_all(ctrl.project, ctrl.measurements(), res.sample_table, res.bio_table, data, folder)
-            fig_page = self.pages["figure"][1]
-            from ..core.figure import plot_groups, save_figure
             from matplotlib.figure import Figure
-            if len(res.bio_table):
-                st = fig_page.style()
-                fig = plot_groups(res.bio_table, st, Figure(figsize=(st.width_in, st.height_in)))
+            from ..core.figure import figure_caption, plot_groups, save_figure
+            from ..core.stats_runner import run_stats, stats_table_csv
+            out = run_stats(ctrl.project.settings, res)
+            if out.ok:
+                p = Path(folder) / "stats_results.csv"
+                stats_table_csv(out, p)
+                files.append(str(p))
+            if len(res.bio_table) and not res.blocking:
+                st = self.pages["figure"][1].style()
+                ann = out.annotations if (st.show_stats and out.ok) else None
+                fig = plot_groups(res.bio_table, st, Figure(figsize=(st.width_in, st.height_in)), ann)
                 for ext in ("png", "svg", "pdf"):
                     p = Path(folder) / f"figure.{ext}"
                     save_figure(fig, str(p), dpi=st.dpi)
                     files.append(str(p))
+                s = ctrl.project.settings
+                cap = figure_caption(res.bio_table, st, out.description if ann else "",
+                                     f"正規化：{s.numerator_protein} ÷ {s.denominator_protein}、対照群 {s.control_group or '未設定'}。")
+                p = Path(folder) / "figure_caption.txt"
+                p.write_text(cap + "\n", encoding="utf-8")
+                files.append(str(p))
         except Exception as e:  # noqa: BLE001
             error_box(self, "出力できません", str(e), "出力先フォルダーに書き込めるか確認してください。")
             return

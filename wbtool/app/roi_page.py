@@ -19,7 +19,8 @@ from ..core.lanes import suggest_lanes
 from ..core.pipeline import measure_one
 from ..core.quant import lane_profile, local_background_rects, profile_peak_area
 from ..models.project import (
-    BG_LABELS, BG_LOCAL, BG_MANUAL, BG_METHODS, POLARITY_BRIGHT, POLARITY_DARK, BandROI, Lane, Rect, Sample,
+    BG_LABELS, BG_LOCAL, BG_MANUAL, BG_METHODS, POLARITY_BRIGHT, POLARITY_DARK, ROLE_LABELS, BandROI, Lane, Rect,
+    Sample,
 )
 from .widgets import HintBox, LazyRefreshMixin, fmt, page_header
 
@@ -74,8 +75,9 @@ class RoiPage(LazyRefreshMixin, QWidget):
     def _build_ui(self) -> None:
         root = QVBoxLayout(self)
         root.addWidget(page_header(
-            "レーン・バンドROI",
-            "画像上でレーンとバンドの矩形 ROI を設定します。ROI 座標は原画像の画素単位で保存され、拡大率に依存しません。"))
+            "レーン・バンドの測定領域（ROI）",
+            "画像上でレーンとバンドの矩形の測定領域（ROI: region of interest）を設定します。"
+            "ROI 座標は原画像の画素単位で保存され、拡大率に依存しません。"))
         self.hint = HintBox(
             "ROI を動かすと右下の値が<b>リアルタイムに</b>変わります。<b>表示の切替（反転・コントラスト）は測定値を変えません。</b>"
             "測定は常に原画像の画素値 p で行い、<b>極性</b>は S の符号 s（暗いバンド −1／明るいバンド +1）を決めます。"
@@ -160,11 +162,21 @@ class RoiPage(LazyRefreshMixin, QWidget):
         bottom = QWidget()
         bl = QVBoxLayout(bottom)
         bl.setContentsMargins(0, 0, 0, 0)
+        frow = QHBoxLayout()
+        frow.addWidget(QLabel("表示するタンパク質："))
+        self.cmb_filter = QComboBox()
+        self.cmb_filter.setToolTip("1枚の画像に複数のタンパク質（分子量の違うバンド）がある場合、タンパク質ごとに一覧できます。")
+        self.cmb_filter.currentIndexChanged.connect(lambda _i: None if self._building else self._fill_tables())
+        frow.addWidget(self.cmb_filter)
+        self.lbl_groups = QLabel()
+        self.lbl_groups.setStyleSheet("color:#555;")
+        frow.addWidget(self.lbl_groups, 1)
+        bl.addLayout(frow)
         self.tabs = QTabWidget()
         self.tbl_bands = QTableWidget()
         self.tbl_lanes = QTableWidget()
         self.tabs.addTab(self.tbl_bands, "バンドと測定値")
-        self.tabs.addTab(self.tbl_lanes, "レーンと sample_id")
+        self.tabs.addTab(self.tbl_lanes, "レーンと試料ID")
         for t in (self.tbl_bands, self.tbl_lanes):
             t.setSelectionBehavior(QAbstractItemView.SelectRows)
             t.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -245,6 +257,15 @@ class RoiPage(LazyRefreshMixin, QWidget):
         self.spn_bgh.editingFinished.connect(self._on_bg_params)
         hb = QHBoxLayout(); hb.addWidget(QLabel("間隔")); hb.addWidget(self.spn_gap); hb.addWidget(QLabel("高さ")); hb.addWidget(self.spn_bgh)
         f3.addRow("近傍(px)", hb)
+        self.spn_gap_pct = QSpinBox(); self.spn_gap_pct.setRange(0, 500); self.spn_gap_pct.setValue(30); self.spn_gap_pct.setSuffix(" %")
+        self.spn_bgh_pct = QSpinBox(); self.spn_bgh_pct.setRange(1, 500); self.spn_bgh_pct.setValue(50); self.spn_bgh_pct.setSuffix(" %")
+        hb = QHBoxLayout(); hb.addWidget(self.spn_gap_pct); hb.addWidget(self.spn_bgh_pct)
+        b = QPushButton("適用")
+        b.setToolTip("バンド ROI の高さ h（この画像の中央値）に対する比率で、間隔と高さ（px）を設定します。"
+                     "比率は目安で、正解の値ではありません。隣のバンドや汚れが背景帯に入らないか必ず確認してください。")
+        b.clicked.connect(self._apply_bg_ratio)
+        hb.addWidget(b)
+        f3.addRow("h に対する比", hb)
         b = QPushButton("手動背景ROIを追加")
         b.clicked.connect(self._add_bg_roi)
         f3.addRow(b)
@@ -623,11 +644,26 @@ class RoiPage(LazyRefreshMixin, QWidget):
         im = self.current_image()
         self._building = True
         try:
+            self._fill_filter(im)
             self._fill_lane_table(im)
             self._fill_band_table(im)
         finally:
             self._building = False
         self._sync_table_selection()
+
+    def _fill_filter(self, im) -> None:
+        cur = self.cmb_filter.currentData() or ""
+        self.cmb_filter.clear()
+        self.cmb_filter.addItem("すべて", "")
+        counts: dict[str, int] = {}
+        for b in (im.bands if im else []):
+            counts[im.band_protein(b) or "（未設定）"] = counts.get(im.band_protein(b) or "（未設定）", 0) + 1
+        roles = self.ctrl.project.settings.protein_roles
+        for name in counts:
+            role = roles.get(name)
+            self.cmb_filter.addItem(name + (f"（{ROLE_LABELS[role].split('（')[0]}）" if role else ""), name)
+        self.cmb_filter.setCurrentIndex(max(self.cmb_filter.findData(cur), 0))
+        self.lbl_groups.setText("　".join(f"{n}：{c} バンド" for n, c in counts.items()))
 
     def _fill_lane_table(self, im) -> None:
         t = self.tbl_lanes
@@ -665,6 +701,9 @@ class RoiPage(LazyRefreshMixin, QWidget):
         t.setColumnCount(len(self.BAND_COLS))
         t.setHorizontalHeaderLabels(self.BAND_COLS)
         bands = im.bands if im else []
+        filt = self.cmb_filter.currentData() if hasattr(self, "cmb_filter") else ""
+        if filt:
+            bands = [b for b in bands if im.band_protein(b) == filt]
         t.setRowCount(len(bands))
         if not bands:
             return
@@ -764,6 +803,23 @@ class RoiPage(LazyRefreshMixin, QWidget):
             self.ctrl.commit("背景推定法の変更", f"{im.image_id}: {BG_LABELS[old]} → {BG_LABELS[new]}")
             if new == BG_MANUAL and not im.bg_rois:
                 QMessageBox.information(self, "手動背景ROI", "手動背景ROIがまだありません。「手動背景ROIを追加」で、バンドの無い場所に置いてください。")
+
+    def _apply_bg_ratio(self) -> None:
+        im = self.current_image()
+        if im is None or not im.bands:
+            QMessageBox.information(self, "近傍背景", "バンド ROI がまだありません。")
+            return
+        hs = sorted(b.rect.h for b in im.bands)
+        h = hs[len(hs) // 2]
+        gap = round(h * self.spn_gap_pct.value() / 100)
+        height = max(round(h * self.spn_bgh_pct.value() / 100), 1)
+        if (im.bg_gap, im.bg_height) == (gap, height):
+            return
+        old = (im.bg_gap, im.bg_height)
+        im.bg_gap, im.bg_height = gap, height
+        self.ctrl.commit("近傍背景パラメータの変更（ROI 高さに対する比率）",
+                         f"{im.image_id}: h={h}px、間隔 {self.spn_gap_pct.value()}%・高さ {self.spn_bgh_pct.value()}% → "
+                         f"(間隔, 高さ) {old} → {(gap, height)} px")
 
     def _on_bg_params(self) -> None:
         im = self.current_image()
