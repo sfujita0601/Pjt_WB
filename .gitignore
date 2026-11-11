@@ -19,3 +19,7 @@ results/
 *.zip
 *.dmg
 *.app/
+
+# 開発メモ (公開しない)
+prompt/
+開発報告_確認事項.md
